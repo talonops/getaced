@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"outplayed.dev/src/bookmarks"
@@ -188,93 +187,81 @@ func updateBookmarksWithAnswers(answers []Answer) error {
 
 func main() {
 	ctx := context.Background()
+
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		log.Fatal("OPENAI_API_KEY environment variable is required")
 	}
 	client := openai.NewClient(option.WithAPIKey(apiKey))
 
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer watcher.Close()
-
 	watchDir := os.Getenv("OUTPLAYED_WATCH_DIR")
 	if watchDir == "" {
 		log.Fatal("OUTPLAYED_WATCH_DIR environment variable is required")
 	}
 
-	if err := watcher.Add(watchDir); err != nil {
-		log.Fatal(err)
-	}
+	processed := make(map[string]bool)
 
-	go func() {
-		for {
-			select {
-			case event, ok := <-watcher.Events:
-				if !ok {
-					return
-				}
-				if event.Op != fsnotify.Create {
-					continue
-				}
-				log.Println("processing:", event.Name)
-
-				answers := []Answer{}
-
-				if isImagePath(event.Name) {
-					answers, err = getAnswersFromImage(ctx, client, event.Name)
-					if err != nil {
-						log.Println("get answers:", err)
-						continue
-					}
-				}
-
-				if isHtmlPath(event.Name) {
-					htmlContent, err := os.ReadFile(event.Name)
-					if err != nil {
-						log.Println("read html file:", err)
-						continue
-					}
-
-					log.Println(string(htmlContent))
-
-					cmd := exec.Command("python3", "utils/extract.py")
-					cmd.Stdin = strings.NewReader(string(htmlContent))
-
-					output, err := cmd.Output()
-					if err != nil {
-						log.Println("extract.py error:", err)
-						continue
-					}
-
-					log.Println(string(output))
-
-					answers, err = getAnswersFromReference(ctx, client, string(output))
-					if err != nil {
-						log.Println("get answers:", err)
-						continue
-					}
-				}
-
-				// Kill Chrome so it doesn't overwrite our bookmark changes
-				exec.Command("pkill", "-a", "Google Chrome").Run()
-				time.Sleep(500 * time.Millisecond)
-
-				if err := updateBookmarksWithAnswers(answers); err != nil {
-					log.Println("update bookmarks:", err)
-					continue
-				}
-				exec.Command("open", "-a", "Google Chrome").Run()
-			case err, ok := <-watcher.Errors:
-				if !ok {
-					return
-				}
-				log.Println("watcher error:", err)
-			}
+	for {
+		files, err := os.ReadDir(watchDir)
+		if err != nil {
+			log.Println("read dir:", err)
+			time.Sleep(10 * time.Second)
+			continue
 		}
-	}()
 
-	<-make(chan struct{})
+		for _, f := range files {
+			if f.IsDir() || processed[f.Name()] {
+				continue
+			}
+
+			path := filepath.Join(watchDir, f.Name())
+			answers := []Answer{}
+
+			if isImagePath(path) {
+				answers, err = getAnswersFromImage(ctx, client, path)
+				if err != nil {
+					log.Println("get answers:", err)
+					continue
+				}
+			} else if isHtmlPath(path) {
+				htmlContent, err := os.ReadFile(path)
+				if err != nil {
+					log.Println("read html file:", err)
+					continue
+				}
+
+				cmd := exec.Command("python3", "utils/extract.py")
+				cmd.Stdin = strings.NewReader(string(htmlContent))
+				output, err := cmd.Output()
+				if err != nil {
+					log.Println("extract.py error:", err)
+					continue
+				}
+
+				answers, err = getAnswersFromReference(ctx, client, string(output))
+				if err != nil {
+					log.Println("get answers:", err)
+					continue
+				}
+			} else {
+				processed[f.Name()] = true
+				continue
+			}
+
+			exec.Command("pkill", "-f", "google-chrome").Run()
+			time.Sleep(500 * time.Millisecond)
+
+			if err := updateBookmarksWithAnswers(answers); err != nil {
+				log.Println("update bookmarks:", err)
+				continue
+			}
+
+			exec.Command("google-chrome", "--no-sandbox", "--headless").Start()
+
+			processed[f.Name()] = true
+			log.Println("done:", f.Name())
+		}
+
+		time.Sleep(10 * time.Second)
+	}
 }
