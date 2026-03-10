@@ -205,6 +205,10 @@ func main() {
 		log.Fatal("OUTPLAYED_WATCH_DIR environment variable is required")
 	}
 
+	if err := watcher.Add(watchDir); err != nil {
+		log.Fatal(err)
+	}
+
 	go func() {
 		for {
 			select {
