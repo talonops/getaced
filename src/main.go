@@ -217,6 +217,8 @@ func main() {
 			path := filepath.Join(watchDir, f.Name())
 			answers := []Answer{}
 
+			log.Println(path)
+
 			if isImagePath(path) {
 				answers, err = getAnswersFromImage(ctx, client, path)
 				if err != nil {
