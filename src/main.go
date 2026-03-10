@@ -18,18 +18,13 @@ import (
 	"github.com/talonops/checkmate/src/bookmarks"
 )
 
-var imageExts = map[string]string{
-	".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-	".webp": "image/webp", ".gif": "image/gif",
-}
-
 const worksheetPrompt = `You are a high school student answering questions from a worksheet or assignment.
 
 Look at the image (screenshot or photo of a worksheet/assignment) and answer every question you see.
 
 Rules:
 - If multiple choice, just give the letter (A, B, C, D, etc.)
-- If open ended, answer short and simple like a student would. casual, not formal. like you understood it but youre not trying to impress anyone.
+- If open ended, answer short and simple like a student would. casual, not formal. like you understood it but your not trying to impress anyone.
 - Do not explain your reasoning unless the question asks you to
 - Do not add anything extra
 - Do not skip any questions
@@ -71,13 +66,15 @@ type AnswersResponse struct {
 }
 
 func isImagePath(path string) bool {
-	_, ok := imageExts[strings.ToLower(filepath.Ext(path))]
-	return ok
+	return strings.ToLower(filepath.Ext(path)) == ".png"
+}
+
+func isHtmlPath(path string) bool {
+	return strings.ToLower(filepath.Ext(path)) == ".html"
 }
 
 func getAnswersFromImage(ctx context.Context, client openai.Client, imagePath string) ([]Answer, error) {
-	ext := strings.ToLower(filepath.Ext(imagePath))
-	mime := imageExts[ext]
+	mime := "image/png"
 	data, err := os.ReadFile(imagePath)
 	if err != nil {
 		return nil, err
@@ -161,16 +158,42 @@ func main() {
 				if !ok {
 					return
 				}
-				if event.Op != fsnotify.Create || !isImagePath(event.Name) {
+				if event.Op != fsnotify.Create {
 					continue
 				}
 				log.Println("processing:", event.Name)
 
-				answers, err := getAnswersFromImage(ctx, client, event.Name)
-				if err != nil {
-					log.Println("get answers:", err)
-					continue
+				answers := []Answer{}
+
+				if isImagePath(event.Name) {
+					answers, err = getAnswersFromImage(ctx, client, event.Name)
+					if err != nil {
+						log.Println("get answers:", err)
+						continue
+					}
 				}
+
+				if isHtmlPath(event.Name) {
+					htmlContent, err := os.ReadFile(event.Name)
+					if err != nil {
+						log.Println("read html file:", err)
+						continue
+					}
+
+					log.Println(string(htmlContent))
+
+					cmd := exec.Command("python3", "utils/extract.py")
+					cmd.Stdin = strings.NewReader(string(htmlContent))
+
+					output, err := cmd.Output()
+					if err != nil {
+						log.Println("extract.py error:", err)
+						continue
+					}
+
+					log.Println(string(output))
+				}
+
 				// Kill Chrome so it doesn't overwrite our bookmark changes
 				exec.Command("pkill", "-a", "Google Chrome").Run()
 				time.Sleep(500 * time.Millisecond)
