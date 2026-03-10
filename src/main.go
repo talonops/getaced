@@ -18,24 +18,6 @@ import (
 	"github.com/talonops/checkmate/src/bookmarks"
 )
 
-const worksheetPrompt = `You are a high school student answering questions from a worksheet or assignment.
-
-Look at the image (screenshot or photo of a worksheet/assignment) and answer every question you see.
-
-Rules:
-- If multiple choice, just give the letter (A, B, C, D, etc.)
-- If open ended, answer short and simple like a student would. casual, not formal. like you understood it but your not trying to impress anyone.
-- Do not explain your reasoning unless the question asks you to
-- Do not add anything extra
-- Do not skip any questions
-
-Return JSON in this format:
-{
-  "answers": [
-    { "question": "1", "answer": "your answer" }
-  ]
-}`
-
 var answersJSONSchema = map[string]interface{}{
 	"type": "object",
 	"properties": map[string]interface{}{
@@ -85,8 +67,83 @@ func getAnswersFromImage(ctx context.Context, client openai.Client, imagePath st
 		Model: openai.ChatModelGPT4o,
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
-				openai.TextContentPart(worksheetPrompt),
+				openai.TextContentPart(`
+				You are a high school student answering questions from a worksheet or assignment.
+
+				Look at the image (screenshot or photo of a worksheet/assignment) and answer every question you see.
+
+				Rules:
+				- If multiple choice, just give the letter (A, B, C, D, etc.)
+				- If open ended, answer short and simple like a student would. casual, not formal. like you understood it but your not trying to impress anyone.
+				- Do not explain your reasoning unless the question asks you to
+				- Do not add anything extra
+				- Do not skip any questions
+
+				Return JSON in this format:
+				{
+					"answers": [
+						{
+						"question": "1",
+						"answer": "your answer"
+						}
+					]
+				}
+  `),
 				openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{URL: dataURL}),
+			}),
+		},
+		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
+			OfJSONSchema: &openai.ResponseFormatJSONSchemaParam{
+				JSONSchema: openai.ResponseFormatJSONSchemaJSONSchemaParam{
+					Name:   "answers",
+					Schema: answersJSONSchema,
+					Strict: openai.Bool(true),
+				},
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var out AnswersResponse
+	if err := json.Unmarshal([]byte(resp.Choices[0].Message.Content), &out); err != nil {
+		return nil, err
+	}
+	return out.Answers, nil
+}
+
+func getAnswersFromReference(ctx context.Context, client openai.Client, reference string) ([]Answer, error) {
+	resp, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Model: openai.ChatModelGPT4o,
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
+				openai.TextContentPart(fmt.Sprintf(`
+				You are a high school student answering questions.
+
+				Read the following reference and answer every question you find.
+
+				--- REFERENCE ---
+				%s
+				--- END REFERENCE ---
+
+				Rules:
+				- If multiple choice, just give the letter (A, B, C, D, etc.)
+				- If open ended, answer short and simple like a student would. casual, not formal. like you understood it but your not trying to impress anyone.
+				- Do not explain your reasoning unless the question asks you to
+				- Do not add anything extra
+				- Do not skip any questions
+
+				Return JSON in this format:
+				{
+					"answers": [
+						{
+						"question": "1",
+						"answer": "your answer"
+						}
+					]
+				}
+  `, reference)),
 			}),
 		},
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
@@ -192,6 +249,12 @@ func main() {
 					}
 
 					log.Println(string(output))
+
+					answers, err = getAnswersFromReference(ctx, client, string(output))
+					if err != nil {
+						log.Println("get answers:", err)
+						continue
+					}
 				}
 
 				// Kill Chrome so it doesn't overwrite our bookmark changes
