@@ -190,7 +190,7 @@ func main() {
 	ctx := context.Background()
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		apiKey = "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"
+		log.Fatal("OPENAI_API_KEY environment variable is required")
 	}
 	client := openai.NewClient(option.WithAPIKey(apiKey))
 
@@ -200,9 +200,9 @@ func main() {
 	}
 	defer watcher.Close()
 
-	watchDir := "/Users/yourbaba4life/Library/CloudStorage/GoogleDrive-383997@eriesd.org/My Drive/school work"
-	if err := watcher.Add(watchDir); err != nil {
-		log.Fatal(err)
+	watchDir := os.Getenv("OUTPLAYED_WATCH_DIR")
+	if watchDir == "" {
+		log.Fatal("OUTPLAYED_WATCH_DIR environment variable is required")
 	}
 
 	go func() {
