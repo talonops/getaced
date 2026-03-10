@@ -33,11 +33,11 @@ func Path() string {
 	home, _ := os.UserHomeDir()
 	switch runtime.GOOS {
 	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", "Google", "Chrome", "Profile 1", "Bookmarks")
+		return filepath.Join(home, "Library", "Application Support", "Google", "Chrome", "Default", "Bookmarks")
 	case "windows":
-		return filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data", "Profile 1", "Bookmarks")
+		return filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data", "Default", "Bookmarks")
 	default:
-		return filepath.Join(home, ".config", "google-chrome", "Profile 1", "Bookmarks")
+		return filepath.Join(home, ".config", "google-chrome", "Default", "Bookmarks")
 	}
 }
 
