@@ -200,6 +200,8 @@ func main() {
 	}
 
 	processed := make(map[string]bool)
+	startTime := time.Now()
+	log.Println("watching:", watchDir)
 
 	for {
 		files, err := os.ReadDir(watchDir)
@@ -214,19 +216,24 @@ func main() {
 				continue
 			}
 
+			info, err := f.Info()
+			if err != nil || info.ModTime().Before(startTime) {
+				processed[f.Name()] = true
+				continue
+			}
+
 			path := filepath.Join(watchDir, f.Name())
+			log.Println("processing:", f.Name())
+
 			answers := []Answer{}
 
 			if isImagePath(path) {
-				log.Println(path)
 				answers, err = getAnswersFromImage(ctx, client, path)
-				log.Println(answers)
 				if err != nil {
 					log.Println("get answers:", err)
 					continue
 				}
 			} else if isHtmlPath(path) {
-				log.Println(path)
 				htmlContent, err := os.ReadFile(path)
 				if err != nil {
 					log.Println("read html file:", err)
