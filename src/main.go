@@ -217,15 +217,16 @@ func main() {
 			path := filepath.Join(watchDir, f.Name())
 			answers := []Answer{}
 
-			log.Println(path)
-
 			if isImagePath(path) {
+				log.Println(path)
 				answers, err = getAnswersFromImage(ctx, client, path)
+				log.Println(answers)
 				if err != nil {
 					log.Println("get answers:", err)
 					continue
 				}
 			} else if isHtmlPath(path) {
+				log.Println(path)
 				htmlContent, err := os.ReadFile(path)
 				if err != nil {
 					log.Println("read html file:", err)
