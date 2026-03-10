@@ -74,6 +74,39 @@ func Add(bf *BookmarkFile, name, url string) {
 	})
 }
 
+type BookmarkEntry struct {
+	Name string
+	URL  string
+}
+
+func AddFolder(bf *BookmarkFile, folderName string, entries []BookmarkEntry) {
+	bar := bf.Roots["bookmark_bar"]
+	ts := fmt.Sprintf("%d", time.Since(time.Date(1601, 1, 1, 0, 0, 0, 0, time.UTC)).Microseconds())
+
+	max := 0
+	findMax(bar, &max)
+
+	children := make([]*BookmarkNode, 0, len(entries))
+	for i, e := range entries {
+		children = append(children, &BookmarkNode{
+			DateAdded: ts,
+			ID:        strconv.Itoa(max + 2 + i),
+			Name:      e.Name,
+			Type:      "url",
+			URL:       e.URL,
+		})
+	}
+
+	bar.Children = append(bar.Children, &BookmarkNode{
+		Children:     children,
+		DateAdded:    ts,
+		DateModified: ts,
+		ID:           strconv.Itoa(max + 1),
+		Name:         folderName,
+		Type:         "folder",
+	})
+}
+
 func Clear(bf *BookmarkFile) {
 	bf.Roots["bookmark_bar"].Children = []*BookmarkNode{}
 }
