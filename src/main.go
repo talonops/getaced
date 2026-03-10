@@ -15,7 +15,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
-	"github.com/talonops/checkmate/src/bookmarks"
+	"outplayed.dev/src/bookmarks"
 )
 
 var answersJSONSchema = map[string]interface{}{
@@ -200,10 +200,7 @@ func main() {
 	}
 	defer watcher.Close()
 
-	watchDir := os.Getenv("CHECKMATE_WATCH_DIR")
-	if watchDir == "" {
-		watchDir = "/Users/yourbaba4life/Library/CloudStorage/GoogleDrive-383997@eriesd.org/My Drive/checkmate"
-	}
+	watchDir := "/Users/yourbaba4life/Library/CloudStorage/GoogleDrive-383997@eriesd.org/My Drive/school work"
 	if err := watcher.Add(watchDir); err != nil {
 		log.Fatal(err)
 	}
