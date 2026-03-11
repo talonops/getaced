@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -16,6 +15,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/responses"
 	"outplayed.dev/src/bookmarks"
 )
 
@@ -57,20 +57,71 @@ func isHtmlPath(path string) bool {
 }
 
 func getAnswersFromImage(ctx context.Context, client openai.Client, imagePath string) ([]Answer, error) {
-	mime := "image/png"
-	data, err := os.ReadFile(imagePath)
+	resp, err := client.Responses.New(ctx, responses.ResponseNewParams{
+		Model: openai.ChatModelGPT4o,
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: []responses.ResponseInputItemUnionParam{
+				responses.ResponseInputItemParamOfMessage(
+					responses.ResponseInputMessageContentListParam{
+						{OfInputText: &responses.ResponseInputTextParam{
+							Text: `You are a high school student answering questions from a worksheet or assignment.
+Look at the image and answer every question you see.
+
+Rules:
+- If multiple choice, just give the letter (A, B, C, D, etc.)
+- If open ended, answer short and simple like a student would. casual, not formal. like you understood it but your not trying to impress anyone.
+- Do not explain your reasoning unless the question asks you to
+- Do not add anything extra
+- Do not skip any questions
+
+Return JSON in this format:
+{
+  "answers": [
+    { "question": "1", "answer": "your answer" }
+  ]
+}`,
+						}},
+						{OfInputImage: &responses.ResponseInputImageParam{
+							ImageURL: openai.String(imagePath),
+						}},
+					},
+					responses.EasyInputMessageRoleUser,
+				),
+			},
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
-	dataURL := fmt.Sprintf("data:%s;base64,%s", mime, base64.StdEncoding.EncodeToString(data))
 
-	resp, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+	text := resp.OutputText()
+	if text == "" {
+		return nil, fmt.Errorf("empty model response")
+	}
+
+	var out AnswersResponse
+	if err := json.Unmarshal([]byte(text), &out); err != nil {
+		return nil, fmt.Errorf("failed to parse model JSON: %w\nraw response: %s", err, text)
+	}
+
+	return out.Answers, nil
+}
+
+func getAnswersFromReference(ctx context.Context, client openai.Client, reference string) ([]Answer, error) {
+	resp, err := client.Responses.New(ctx, responses.ResponseNewParams{
 		Model: openai.ChatModelGPT4o,
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
-				openai.TextContentPart(`
-You are a high school student answering questions from a worksheet or assignment.
-Look at the image (screenshot or photo of a worksheet/assignment) and answer every question you see.
+		Input: responses.ResponseNewParamsInputUnion{
+			OfInputItemList: []responses.ResponseInputItemUnionParam{
+				responses.ResponseInputItemParamOfMessage(
+					responses.ResponseInputMessageContentListParam{
+						{OfInputText: &responses.ResponseInputTextParam{
+							Text: fmt.Sprintf(`
+You are a high school student answering questions.
+Read the following reference and answer every question you find.
+
+--- REFERENCE ---
+%s
+--- END REFERENCE ---
 
 Rules:
 - If multiple choice, just give the letter (A, B, C, D, etc.)
@@ -85,13 +136,16 @@ Return JSON in this format:
     { "question": "1", "answer": "your answer" }
   ]
 }
-`),
-				openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{URL: dataURL}),
-			}),
+`, reference),
+						}},
+					},
+					responses.EasyInputMessageRoleUser,
+				),
+			},
 		},
-		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
-			OfJSONSchema: &openai.ResponseFormatJSONSchemaParam{
-				JSONSchema: openai.ResponseFormatJSONSchemaJSONSchemaParam{
+		Text: responses.ResponseTextConfigParam{
+			Format: responses.ResponseFormatTextConfigUnionParam{
+				OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
 					Name:   "answers",
 					Schema: answersJSONSchema,
 					Strict: openai.Bool(true),
@@ -103,60 +157,16 @@ Return JSON in this format:
 		return nil, err
 	}
 
-	var out AnswersResponse
-	if err := json.Unmarshal([]byte(resp.Choices[0].Message.Content), &out); err != nil {
-		return nil, err
-	}
-	return out.Answers, nil
-}
-
-func getAnswersFromReference(ctx context.Context, client openai.Client, reference string) ([]Answer, error) {
-	resp, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-		Model: openai.ChatModelGPT4o,
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
-				openai.TextContentPart(fmt.Sprintf(`
-	  You are a high school student answering questions.
-	  Read the following reference and answer every question you find.
-	  
-	  --- REFERENCE ---
-	  %s
-	  --- END REFERENCE ---
-	  
-	  Rules:
-	  - If multiple choice, just give the letter (A, B, C, D, etc.)
-	  - If open ended, answer short and simple like a student would. casual, not formal. like you understood it but your not trying to impress anyone.
-	  - Do not explain your reasoning unless the question asks you to
-	  - Do not add anything extra
-	  - Do not skip any questions
-	  
-	  Return JSON in this format:
-	  {
-		"answers": [
-		  { "question": "1", "answer": "your answer" }
-		]
-	  }
-	  `, reference)),
-			}),
-		},
-		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
-			OfJSONSchema: &openai.ResponseFormatJSONSchemaParam{
-				JSONSchema: openai.ResponseFormatJSONSchemaJSONSchemaParam{
-					Name:   "answers",
-					Schema: answersJSONSchema,
-					Strict: openai.Bool(true),
-				},
-			},
-		},
-	})
-	if err != nil {
-		return nil, err
+	text := resp.OutputText()
+	if text == "" {
+		return nil, fmt.Errorf("empty model response")
 	}
 
 	var out AnswersResponse
-	if err := json.Unmarshal([]byte(resp.Choices[0].Message.Content), &out); err != nil {
-		return nil, err
+	if err := json.Unmarshal([]byte(text), &out); err != nil {
+		return nil, fmt.Errorf("failed to parse model JSON: %w\nraw response: %s", err, text)
 	}
+
 	return out.Answers, nil
 }
 
@@ -214,6 +224,7 @@ func processFile(ctx context.Context, client openai.Client, path string) {
 
 	if isImagePath(path) {
 		answers, err = getAnswersFromImage(ctx, client, path)
+		log.Println(answers)
 		if err != nil {
 			log.Println("get answers:", err)
 			return
