@@ -15,30 +15,32 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/option"
-	"github.com/openai/openai-go/v3/responses"
+	openai "github.com/sashabaranov/go-openai"
 	"outplayed.dev/src/bookmarks"
 )
 
-var answersJSONSchema = map[string]interface{}{
-	"type": "object",
-	"properties": map[string]interface{}{
-		"answers": map[string]interface{}{
-			"type": "array",
-			"items": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"question": map[string]interface{}{"type": "string"},
-					"answer":   map[string]interface{}{"type": "string"},
-				},
-				"required":             []string{"question", "answer"},
-				"additionalProperties": false,
-			},
+var answersJSONSchema = &openai.ChatCompletionResponseFormatJSONSchema{
+	Name:   "answers",
+	Strict: true,
+	Schema: json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"answers": {
+				"type": "array",
+				"items": {
+					"type": "object",
+					"properties": {
+						"question": {"type": "string"},
+						"answer":   {"type": "string"}
+					},
+					"required": ["question", "answer"],
+					"additionalProperties": false
+				}
+			}
 		},
-	},
-	"required":             []string{"answers"},
-	"additionalProperties": false,
+		"required": ["answers"],
+		"additionalProperties": false
+	}`),
 }
 
 type Answer struct {
@@ -50,6 +52,15 @@ type AnswersResponse struct {
 	Answers []Answer `json:"answers"`
 }
 
+const systemPrompt = `You are a high school student answering questions from a worksheet or assignment.
+
+Rules:
+- If multiple choice, just give the letter (A, B, C, D, etc.)
+- If open ended, answer short and simple like a student would. casual, not formal. like you understood it but your not trying to impress anyone.
+- Do not explain your reasoning unless the question asks you to
+- Do not add anything extra
+- Do not skip any questions`
+
 func isImagePath(path string) bool {
 	return strings.ToLower(filepath.Ext(path)) == ".png"
 }
@@ -58,8 +69,29 @@ func isHtmlPath(path string) bool {
 	return strings.ToLower(filepath.Ext(path)) == ".html"
 }
 
-func getAnswersFromImage(ctx context.Context, client openai.Client, imagePath string) ([]Answer, error) {
+func parseAnswers(text string) ([]Answer, error) {
+	// Strip markdown code fences if present
+	cleaned := strings.TrimSpace(text)
+	if strings.HasPrefix(cleaned, "```") {
+		// Remove opening fence (```json or ```)
+		if idx := strings.Index(cleaned, "\n"); idx != -1 {
+			cleaned = cleaned[idx+1:]
+		}
+		// Remove closing fence
+		if idx := strings.LastIndex(cleaned, "```"); idx != -1 {
+			cleaned = cleaned[:idx]
+		}
+		cleaned = strings.TrimSpace(cleaned)
+	}
 
+	var out AnswersResponse
+	if err := json.Unmarshal([]byte(cleaned), &out); err != nil {
+		return nil, fmt.Errorf("failed to parse model JSON: %w\nraw response: %s", err, text)
+	}
+	return out.Answers, nil
+}
+
+func getAnswersFromImage(ctx context.Context, client *openai.Client, imagePath string) ([]Answer, error) {
 	data, err := os.ReadFile(imagePath)
 	if err != nil {
 		return nil, err
@@ -68,117 +100,73 @@ func getAnswersFromImage(ctx context.Context, client openai.Client, imagePath st
 	mime := http.DetectContentType(data)
 	dataURL := fmt.Sprintf("data:%s;base64,%s", mime, base64.StdEncoding.EncodeToString(data))
 
-	resp, err := client.Responses.New(ctx, responses.ResponseNewParams{
-		Model: openai.ChatModelGPT4o,
-		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: []responses.ResponseInputItemUnionParam{
-				responses.ResponseInputItemParamOfMessage(
-					responses.ResponseInputMessageContentListParam{
-						{OfInputText: &responses.ResponseInputTextParam{
-							Text: `You are a high school student answering questions from a worksheet or assignment.
-Look at the image and answer every question you see.
-
-Rules:
-- If multiple choice, just give the letter (A, B, C, D, etc.)
-- If open ended, answer short and simple like a student would. casual, not formal. like you understood it but your not trying to impress anyone.
-- Do not explain your reasoning unless the question asks you to
-- Do not add anything extra
-- Do not skip any questions
-
-Return JSON in this format:
-{
-  "answers": [
-    { "question": "1", "answer": "your answer" }
-  ]
-}`,
-						}},
-						{OfInputImage: &responses.ResponseInputImageParam{
-							ImageURL: openai.String(dataURL),
-						}},
-					},
-					responses.EasyInputMessageRoleUser,
-				),
+	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: openai.GPT4o,
+		Messages: []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: systemPrompt,
 			},
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	text := resp.OutputText()
-	if text == "" {
-		return nil, fmt.Errorf("empty model response")
-	}
-
-	var out AnswersResponse
-	if err := json.Unmarshal([]byte(text), &out); err != nil {
-		return nil, fmt.Errorf("failed to parse model JSON: %w\nraw response: %s", err, text)
-	}
-
-	return out.Answers, nil
-}
-
-func getAnswersFromReference(ctx context.Context, client openai.Client, reference string) ([]Answer, error) {
-	resp, err := client.Responses.New(ctx, responses.ResponseNewParams{
-		Model: openai.ChatModelGPT4o,
-		Input: responses.ResponseNewParamsInputUnion{
-			OfInputItemList: []responses.ResponseInputItemUnionParam{
-				responses.ResponseInputItemParamOfMessage(
-					responses.ResponseInputMessageContentListParam{
-						{OfInputText: &responses.ResponseInputTextParam{
-							Text: fmt.Sprintf(`
-You are a high school student answering questions.
-Read the following reference and answer every question you find.
-
---- REFERENCE ---
-%s
---- END REFERENCE ---
-
-Rules:
-- If multiple choice, just give the letter (A, B, C, D, etc.)
-- If open ended, answer short and simple like a student would. casual, not formal. like you understood it but your not trying to impress anyone.
-- Do not explain your reasoning unless the question asks you to
-- Do not add anything extra
-- Do not skip any questions
-
-Return JSON in this format:
-{
-  "answers": [
-    { "question": "1", "answer": "your answer" }
-  ]
-}
-`, reference),
-						}},
+			{
+				Role: openai.ChatMessageRoleUser,
+				MultiContent: []openai.ChatMessagePart{
+					{
+						Type: openai.ChatMessagePartTypeText,
+						Text: "Look at the image and answer every question you see.",
 					},
-					responses.EasyInputMessageRoleUser,
-				),
-			},
-		},
-		Text: responses.ResponseTextConfigParam{
-			Format: responses.ResponseFormatTextConfigUnionParam{
-				OfJSONSchema: &responses.ResponseFormatTextJSONSchemaConfigParam{
-					Name:   "answers",
-					Schema: answersJSONSchema,
-					Strict: openai.Bool(true),
+					{
+						Type: openai.ChatMessagePartTypeImageURL,
+						ImageURL: &openai.ChatMessageImageURL{
+							URL:    dataURL,
+							Detail: openai.ImageURLDetailAuto,
+						},
+					},
 				},
 			},
 		},
+		ResponseFormat: &openai.ChatCompletionResponseFormat{
+			Type:       openai.ChatCompletionResponseFormatTypeJSONSchema,
+			JSONSchema: answersJSONSchema,
+		},
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	text := resp.OutputText()
-	if text == "" {
+	if len(resp.Choices) == 0 {
 		return nil, fmt.Errorf("empty model response")
 	}
 
-	var out AnswersResponse
-	if err := json.Unmarshal([]byte(text), &out); err != nil {
-		return nil, fmt.Errorf("failed to parse model JSON: %w\nraw response: %s", err, text)
+	return parseAnswers(resp.Choices[0].Message.Content)
+}
+
+func getAnswersFromReference(ctx context.Context, client *openai.Client, reference string) ([]Answer, error) {
+	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: openai.GPT4o,
+		Messages: []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: systemPrompt,
+			},
+			{
+				Role:    openai.ChatMessageRoleUser,
+				Content: fmt.Sprintf("Read the following reference and answer every question you find.\n\n--- REFERENCE ---\n%s\n--- END REFERENCE ---", reference),
+			},
+		},
+		ResponseFormat: &openai.ChatCompletionResponseFormat{
+			Type:       openai.ChatCompletionResponseFormatTypeJSONSchema,
+			JSONSchema: answersJSONSchema,
+		},
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	return out.Answers, nil
+	if len(resp.Choices) == 0 {
+		return nil, fmt.Errorf("empty model response")
+	}
+
+	return parseAnswers(resp.Choices[0].Message.Content)
 }
 
 func updateBookmarksWithAnswers(answers []Answer) error {
@@ -218,7 +206,7 @@ func waitForWrite(path string) {
 	}
 }
 
-func processFile(ctx context.Context, client openai.Client, path string) {
+func processFile(ctx context.Context, client *openai.Client, path string) {
 	log.Println("processing:", filepath.Base(path))
 	waitForWrite(path)
 	log.Println("file ready:", filepath.Base(path))
@@ -227,7 +215,6 @@ func processFile(ctx context.Context, client openai.Client, path string) {
 	log.Println("isImage:", isImagePath(path))
 	log.Println("isHtml:", isHtmlPath(path))
 
-	// wait for file to finish writing
 	time.Sleep(2 * time.Second)
 
 	var answers []Answer
@@ -295,7 +282,7 @@ func main() {
 	if apiKey == "" {
 		log.Fatal("OPENAI_API_KEY environment variable is required")
 	}
-	client := openai.NewClient(option.WithAPIKey(apiKey))
+	client := openai.NewClient(apiKey)
 
 	watchDir := os.Getenv("OUTPLAYED_WATCH_DIR")
 	if watchDir == "" {
@@ -321,7 +308,7 @@ func main() {
 			if !ok {
 				return
 			}
-			if event.Op&(fsnotify.Create|fsnotify.Write) != 0 {
+			if event.Op&fsnotify.Create != 0 {
 				if last, exists := lastProcessed[event.Name]; exists && time.Since(last) < 10*time.Second {
 					continue
 				}
