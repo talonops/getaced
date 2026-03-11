@@ -181,8 +181,30 @@ func updateBookmarksWithAnswers(answers []Answer) error {
 	return bookmarks.Write(bf)
 }
 
+func waitForWrite(path string) {
+	var lastSize int64 = -1
+	for {
+		info, err := os.Stat(path)
+		if err != nil {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+		if info.Size() == lastSize {
+			return
+		}
+		lastSize = info.Size()
+		time.Sleep(1 * time.Second)
+	}
+}
+
 func processFile(ctx context.Context, client openai.Client, path string) {
 	log.Println("processing:", filepath.Base(path))
+	waitForWrite(path)
+	log.Println("file ready:", filepath.Base(path))
+
+	log.Println("ext:", filepath.Ext(path))
+	log.Println("isImage:", isImagePath(path))
+	log.Println("isHtml:", isHtmlPath(path))
 
 	// wait for file to finish writing
 	time.Sleep(2 * time.Second)
