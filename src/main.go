@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,6 +59,15 @@ func isHtmlPath(path string) bool {
 }
 
 func getAnswersFromImage(ctx context.Context, client openai.Client, imagePath string) ([]Answer, error) {
+
+	data, err := os.ReadFile(imagePath)
+	if err != nil {
+		return nil, err
+	}
+
+	mime := http.DetectContentType(data)
+	dataURL := fmt.Sprintf("data:%s;base64,%s", mime, base64.StdEncoding.EncodeToString(data))
+
 	resp, err := client.Responses.New(ctx, responses.ResponseNewParams{
 		Model: openai.ChatModelGPT4o,
 		Input: responses.ResponseNewParamsInputUnion{
@@ -82,7 +93,7 @@ Return JSON in this format:
 }`,
 						}},
 						{OfInputImage: &responses.ResponseInputImageParam{
-							ImageURL: openai.String(imagePath),
+							ImageURL: openai.String(dataURL),
 						}},
 					},
 					responses.EasyInputMessageRoleUser,
