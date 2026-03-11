@@ -206,6 +206,20 @@ func waitForWrite(path string) {
 	}
 }
 
+func startChromeWithSync() {
+	if runtime.GOOS != "darwin" {
+		exec.Command("pkill", "-f", "Xvfb").Run()
+		exec.Command("pkill", "-f", "google-chrome").Run()
+		time.Sleep(2 * time.Second)
+		exec.Command("Xvfb", ":99", "-screen", "0", "1024x768x24").Start()
+		time.Sleep(1 * time.Second)
+		cmd := exec.Command("google-chrome", "--no-sandbox", "--no-first-run", "--disable-gpu")
+		cmd.Env = append(os.Environ(), "DISPLAY=:99")
+		cmd.Start()
+		log.Println("chrome started with Xvfb")
+	}
+}
+
 func processFile(ctx context.Context, client *openai.Client, path string) {
 	log.Println("processing:", filepath.Base(path))
 	waitForWrite(path)
@@ -214,13 +228,6 @@ func processFile(ctx context.Context, client *openai.Client, path string) {
 	log.Println("ext:", filepath.Ext(path))
 	log.Println("isImage:", isImagePath(path))
 	log.Println("isHtml:", isHtmlPath(path))
-
-	if runtime.GOOS == "darwin" {
-		exec.Command("pkill", "-f", "Google Chrome").Run()
-	} else {
-		exec.Command("pkill", "-f", "google-chrome").Run()
-	}
-	time.Sleep(2 * time.Second)
 
 	var answers []Answer
 	var err error
@@ -257,20 +264,19 @@ func processFile(ctx context.Context, client *openai.Client, path string) {
 		return
 	}
 
+	if runtime.GOOS == "darwin" {
+		exec.Command("pkill", "-f", "Google Chrome").Run()
+	} else {
+		exec.Command("pkill", "-f", "google-chrome").Run()
+	}
+	time.Sleep(5 * time.Second)
+
 	if err := updateBookmarksWithAnswers(answers); err != nil {
 		log.Println("update bookmarks:", err)
 		return
 	}
 
-	if runtime.GOOS == "darwin" {
-		exec.Command("open", "-a", "Google Chrome").Run()
-	} else {
-		exec.Command("Xvfb", ":99", "-screen", "0", "1024x768x24").Start()
-		time.Sleep(1 * time.Second)
-		cmd := exec.Command("google-chrome", "--no-sandbox", "--no-first-run", "--disable-gpu")
-		cmd.Env = append(os.Environ(), "DISPLAY=:99")
-		cmd.Start()
-	}
+	startChromeWithSync()
 
 	log.Println("done:", filepath.Base(path))
 }
