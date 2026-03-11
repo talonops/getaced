@@ -17,6 +17,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	openai "github.com/sashabaranov/go-openai"
 	"outplayed.dev/src/bookmarks"
+	"outplayed.dev/src/utils"
 )
 
 var answersJSONSchema = &openai.ChatCompletionResponseFormatJSONSchema{
@@ -55,19 +56,15 @@ type AnswersResponse struct {
 const systemPrompt = `You are a high school student answering questions from a worksheet or assignment.
 
 Rules:
-- If multiple choice, just give the letter (A, B, C, D, etc.)
-- If open ended, answer short and simple like a student would. casual, not formal. like you understood it but your not trying to impress anyone.
+- Number each question starting from 1
+- If multiple choice, answer with just the letter (A, B, C, D, etc.)
+- If open ended, answer short and casual like a real student. no formal language.
 - Do not explain your reasoning unless the question asks you to
 - Do not add anything extra
-- Do not skip any questions`
+- Do not skip any questions
 
-func isImagePath(path string) bool {
-	return strings.ToLower(filepath.Ext(path)) == ".png"
-}
-
-func isHtmlPath(path string) bool {
-	return strings.ToLower(filepath.Ext(path)) == ".html"
-}
+Example output:
+{"answers": [{"question": "1", "answer": "B"}, {"question": "2", "answer": "its when the brain associates two things together"}]}`
 
 func parseAnswers(text string) ([]Answer, error) {
 	// Strip markdown code fences if present
@@ -190,22 +187,6 @@ func updateBookmarksWithAnswers(answers []Answer) error {
 	return bookmarks.Write(bf)
 }
 
-func waitForWrite(path string) {
-	var lastSize int64 = -1
-	for {
-		info, err := os.Stat(path)
-		if err != nil {
-			time.Sleep(500 * time.Millisecond)
-			continue
-		}
-		if info.Size() == lastSize {
-			return
-		}
-		lastSize = info.Size()
-		time.Sleep(1 * time.Second)
-	}
-}
-
 func startChromeWithSync() {
 	if runtime.GOOS != "darwin" {
 		exec.Command("pkill", "-f", "Xvfb").Run()
@@ -222,24 +203,24 @@ func startChromeWithSync() {
 
 func processFile(ctx context.Context, client *openai.Client, path string) {
 	log.Println("processing:", filepath.Base(path))
-	waitForWrite(path)
-	log.Println("file ready:", filepath.Base(path))
+
+	// removed wait for file to load
 
 	log.Println("ext:", filepath.Ext(path))
-	log.Println("isImage:", isImagePath(path))
-	log.Println("isHtml:", isHtmlPath(path))
+	log.Println("isImage:", utils.IsImagePath(path))
+	log.Println("isHtml:", utils.IsHtmlPath(path))
 
 	var answers []Answer
 	var err error
 
-	if isImagePath(path) {
+	if utils.IsImagePath(path) {
 		answers, err = getAnswersFromImage(ctx, client, path)
 		log.Println(answers)
 		if err != nil {
 			log.Println("get answers:", err)
 			return
 		}
-	} else if isHtmlPath(path) {
+	} else if utils.IsHtmlPath(path) {
 		htmlContent, err := os.ReadFile(path)
 		if err != nil {
 			log.Println("read html file:", err)
