@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"outplayed.dev/src/bookmarks"
@@ -180,6 +181,67 @@ func updateBookmarksWithAnswers(answers []Answer) error {
 	return bookmarks.Write(bf)
 }
 
+func processFile(ctx context.Context, client openai.Client, path string) {
+	log.Println("processing:", filepath.Base(path))
+
+	// wait for file to finish writing
+	time.Sleep(2 * time.Second)
+
+	var answers []Answer
+	var err error
+
+	if isImagePath(path) {
+		answers, err = getAnswersFromImage(ctx, client, path)
+		if err != nil {
+			log.Println("get answers:", err)
+			return
+		}
+	} else if isHtmlPath(path) {
+		htmlContent, err := os.ReadFile(path)
+		if err != nil {
+			log.Println("read html file:", err)
+			return
+		}
+
+		cmd := exec.Command("python3", "utils/extract.py")
+		cmd.Stdin = strings.NewReader(string(htmlContent))
+		output, err := cmd.Output()
+		if err != nil {
+			log.Println("extract.py error:", err)
+			return
+		}
+
+		answers, err = getAnswersFromReference(ctx, client, string(output))
+		if err != nil {
+			log.Println("get answers:", err)
+			return
+		}
+	} else {
+		log.Println("skipping unknown file type:", filepath.Base(path))
+		return
+	}
+
+	if runtime.GOOS == "darwin" {
+		exec.Command("pkill", "-f", "Google Chrome").Run()
+	} else {
+		exec.Command("pkill", "-f", "google-chrome").Run()
+	}
+	time.Sleep(2 * time.Second)
+
+	if err := updateBookmarksWithAnswers(answers); err != nil {
+		log.Println("update bookmarks:", err)
+		return
+	}
+
+	if runtime.GOOS == "darwin" {
+		exec.Command("open", "-a", "Google Chrome").Run()
+	} else {
+		exec.Command("xvfb-run", "google-chrome", "--no-sandbox", "--no-first-run", "--disable-gpu").Start()
+	}
+
+	log.Println("done:", filepath.Base(path))
+}
+
 func main() {
 	ctx := context.Background()
 
@@ -194,89 +256,33 @@ func main() {
 		log.Fatal("OUTPLAYED_WATCH_DIR environment variable is required")
 	}
 
-	processed := make(map[string]bool)
-	startTime := time.Now()
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer watcher.Close()
+
+	if err := watcher.Add(watchDir); err != nil {
+		log.Fatal(err)
+	}
+
 	log.Println("watching:", watchDir)
 	log.Println("platform:", runtime.GOOS)
 
 	for {
-		files, err := os.ReadDir(watchDir)
-		if err != nil {
-			log.Println("read dir:", err)
-			time.Sleep(10 * time.Second)
-			continue
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			if event.Op&(fsnotify.Create|fsnotify.Write) != 0 {
+				processFile(ctx, client, event.Name)
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			log.Println("watcher error:", err)
 		}
-
-		for _, f := range files {
-			if f.IsDir() || processed[f.Name()] {
-				continue
-			}
-
-			info, err := f.Info()
-			if err != nil || info.ModTime().Before(startTime) {
-				processed[f.Name()] = true
-				continue
-			}
-
-			path := filepath.Join(watchDir, f.Name())
-			log.Println("processing:", f.Name())
-
-			answers := []Answer{}
-
-			if isImagePath(path) {
-				answers, err = getAnswersFromImage(ctx, client, path)
-				if err != nil {
-					log.Println("get answers:", err)
-					continue
-				}
-			} else if isHtmlPath(path) {
-				htmlContent, err := os.ReadFile(path)
-				if err != nil {
-					log.Println("read html file:", err)
-					continue
-				}
-
-				cmd := exec.Command("python3", "utils/extract.py")
-				cmd.Stdin = strings.NewReader(string(htmlContent))
-				output, err := cmd.Output()
-				if err != nil {
-					log.Println("extract.py error:", err)
-					continue
-				}
-
-				answers, err = getAnswersFromReference(ctx, client, string(output))
-				if err != nil {
-					log.Println("get answers:", err)
-					continue
-				}
-			} else {
-				log.Println("skipping unknown file type:", f.Name())
-				processed[f.Name()] = true
-				continue
-			}
-
-			if runtime.GOOS == "darwin" {
-				exec.Command("pkill", "-f", "Google Chrome").Run()
-			} else {
-				exec.Command("pkill", "-f", "google-chrome").Run()
-			}
-			time.Sleep(2 * time.Second)
-
-			if err := updateBookmarksWithAnswers(answers); err != nil {
-				log.Println("update bookmarks:", err)
-				continue
-			}
-
-			if runtime.GOOS == "darwin" {
-				exec.Command("open", "-a", "Google Chrome").Run()
-			} else {
-				exec.Command("xvfb-run", "google-chrome", "--no-sandbox", "--no-first-run", "--disable-gpu").Start()
-			}
-
-			processed[f.Name()] = true
-			log.Println("done:", f.Name())
-		}
-
-		time.Sleep(10 * time.Second)
 	}
 }
