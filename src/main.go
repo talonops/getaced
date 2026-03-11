@@ -277,8 +277,6 @@ func processFile(ctx context.Context, client *openai.Client, path string) {
 	log.Println("done:", filepath.Base(path))
 }
 
-var lastProcessed = make(map[string]time.Time)
-
 func main() {
 	ctx := context.Background()
 
@@ -312,11 +310,7 @@ func main() {
 			if !ok {
 				return
 			}
-			if event.Op&(fsnotify.Create|fsnotify.Write) != 0 {
-				if last, exists := lastProcessed[event.Name]; exists && time.Since(last) < 10*time.Second {
-					continue
-				}
-				lastProcessed[event.Name] = time.Now()
+			if event.Op&fsnotify.Create != 0 {
 				processFile(ctx, client, event.Name)
 			}
 		case err, ok := <-watcher.Errors:
