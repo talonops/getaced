@@ -98,7 +98,7 @@ func getAnswersFromImage(ctx context.Context, client *openai.Client, imagePath s
 	dataURL := fmt.Sprintf("data:%s;base64,%s", mime, base64.StdEncoding.EncodeToString(data))
 
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model: openai.GPT4o,
+		Model: openai.GPT5ChatLatest,
 		Messages: []openai.ChatCompletionMessage{
 			{
 				Role:    openai.ChatMessageRoleSystem,
@@ -139,7 +139,7 @@ func getAnswersFromImage(ctx context.Context, client *openai.Client, imagePath s
 
 func getAnswersFromReference(ctx context.Context, client *openai.Client, reference string) ([]Answer, error) {
 	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model: openai.GPT4o,
+		Model: openai.GPT5ChatLatest,
 		Messages: []openai.ChatCompletionMessage{
 			{
 				Role:    openai.ChatMessageRoleSystem,
