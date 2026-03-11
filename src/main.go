@@ -215,6 +215,11 @@ func processFile(ctx context.Context, client *openai.Client, path string) {
 	log.Println("isImage:", isImagePath(path))
 	log.Println("isHtml:", isHtmlPath(path))
 
+	if runtime.GOOS == "darwin" {
+		exec.Command("pkill", "-f", "Google Chrome").Run()
+	} else {
+		exec.Command("pkill", "-f", "google-chrome").Run()
+	}
 	time.Sleep(2 * time.Second)
 
 	var answers []Answer
@@ -251,13 +256,6 @@ func processFile(ctx context.Context, client *openai.Client, path string) {
 		log.Println("skipping unknown file type:", filepath.Base(path))
 		return
 	}
-
-	if runtime.GOOS == "darwin" {
-		exec.Command("pkill", "-f", "Google Chrome").Run()
-	} else {
-		exec.Command("pkill", "-f", "google-chrome").Run()
-	}
-	time.Sleep(2 * time.Second)
 
 	if err := updateBookmarksWithAnswers(answers); err != nil {
 		log.Println("update bookmarks:", err)
