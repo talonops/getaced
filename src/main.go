@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -67,27 +68,23 @@ func getAnswersFromImage(ctx context.Context, client openai.Client, imagePath st
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
 				openai.TextContentPart(`
-				You are a high school student answering questions from a worksheet or assignment.
+You are a high school student answering questions from a worksheet or assignment.
+Look at the image (screenshot or photo of a worksheet/assignment) and answer every question you see.
 
-				Look at the image (screenshot or photo of a worksheet/assignment) and answer every question you see.
+Rules:
+- If multiple choice, just give the letter (A, B, C, D, etc.)
+- If open ended, answer short and simple like a student would. casual, not formal. like you understood it but your not trying to impress anyone.
+- Do not explain your reasoning unless the question asks you to
+- Do not add anything extra
+- Do not skip any questions
 
-				Rules:
-				- If multiple choice, just give the letter (A, B, C, D, etc.)
-				- If open ended, answer short and simple like a student would. casual, not formal. like you understood it but your not trying to impress anyone.
-				- Do not explain your reasoning unless the question asks you to
-				- Do not add anything extra
-				- Do not skip any questions
-
-				Return JSON in this format:
-				{
-					"answers": [
-						{
-						"question": "1",
-						"answer": "your answer"
-						}
-					]
-				}
-  `),
+Return JSON in this format:
+{
+  "answers": [
+    { "question": "1", "answer": "your answer" }
+  ]
+}
+`),
 				openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{URL: dataURL}),
 			}),
 		},
@@ -118,31 +115,27 @@ func getAnswersFromReference(ctx context.Context, client openai.Client, referenc
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage([]openai.ChatCompletionContentPartUnionParam{
 				openai.TextContentPart(fmt.Sprintf(`
-				You are a high school student answering questions.
-
-				Read the following reference and answer every question you find.
-
-				--- REFERENCE ---
-				%s
-				--- END REFERENCE ---
-
-				Rules:
-				- If multiple choice, just give the letter (A, B, C, D, etc.)
-				- If open ended, answer short and simple like a student would. casual, not formal. like you understood it but your not trying to impress anyone.
-				- Do not explain your reasoning unless the question asks you to
-				- Do not add anything extra
-				- Do not skip any questions
-
-				Return JSON in this format:
-				{
-					"answers": [
-						{
-						"question": "1",
-						"answer": "your answer"
-						}
-					]
-				}
-  `, reference)),
+	  You are a high school student answering questions.
+	  Read the following reference and answer every question you find.
+	  
+	  --- REFERENCE ---
+	  %s
+	  --- END REFERENCE ---
+	  
+	  Rules:
+	  - If multiple choice, just give the letter (A, B, C, D, etc.)
+	  - If open ended, answer short and simple like a student would. casual, not formal. like you understood it but your not trying to impress anyone.
+	  - Do not explain your reasoning unless the question asks you to
+	  - Do not add anything extra
+	  - Do not skip any questions
+	  
+	  Return JSON in this format:
+	  {
+		"answers": [
+		  { "question": "1", "answer": "your answer" }
+		]
+	  }
+	  `, reference)),
 			}),
 		},
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
@@ -171,6 +164,7 @@ func updateBookmarksWithAnswers(answers []Answer) error {
 	if err != nil {
 		return err
 	}
+
 	bookmarks.Clear(bf)
 
 	entries := make([]bookmarks.BookmarkEntry, 0, len(answers))
@@ -181,6 +175,7 @@ func updateBookmarksWithAnswers(answers []Answer) error {
 			URL:  schoologyURL,
 		})
 	}
+
 	bookmarks.AddFolder(bf, "school work", entries)
 	return bookmarks.Write(bf)
 }
@@ -202,6 +197,7 @@ func main() {
 	processed := make(map[string]bool)
 	startTime := time.Now()
 	log.Println("watching:", watchDir)
+	log.Println("platform:", runtime.GOOS)
 
 	for {
 		files, err := os.ReadDir(watchDir)
@@ -254,19 +250,28 @@ func main() {
 					continue
 				}
 			} else {
+				log.Println("skipping unknown file type:", f.Name())
 				processed[f.Name()] = true
 				continue
 			}
 
-			exec.Command("pkill", "-f", "google-chrome").Run()
-			time.Sleep(500 * time.Millisecond)
+			if runtime.GOOS == "darwin" {
+				exec.Command("pkill", "-f", "Google Chrome").Run()
+			} else {
+				exec.Command("pkill", "-f", "google-chrome").Run()
+			}
+			time.Sleep(2 * time.Second)
 
 			if err := updateBookmarksWithAnswers(answers); err != nil {
 				log.Println("update bookmarks:", err)
 				continue
 			}
 
-			exec.Command("google-chrome", "--no-sandbox", "--headless").Start()
+			if runtime.GOOS == "darwin" {
+				exec.Command("open", "-a", "Google Chrome").Run()
+			} else {
+				exec.Command("xvfb-run", "google-chrome", "--no-sandbox", "--no-first-run", "--disable-gpu").Start()
+			}
 
 			processed[f.Name()] = true
 			log.Println("done:", f.Name())
