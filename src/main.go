@@ -267,7 +267,11 @@ func processFile(ctx context.Context, client *openai.Client, path string) {
 	if runtime.GOOS == "darwin" {
 		exec.Command("open", "-a", "Google Chrome").Run()
 	} else {
-		exec.Command("xvfb-run", "google-chrome", "--no-sandbox", "--no-first-run", "--disable-gpu").Start()
+		exec.Command("Xvfb", ":99", "-screen", "0", "1024x768x24").Start()
+		time.Sleep(1 * time.Second)
+		cmd := exec.Command("google-chrome", "--no-sandbox", "--no-first-run", "--disable-gpu")
+		cmd.Env = append(os.Environ(), "DISPLAY=:99")
+		cmd.Start()
 	}
 
 	log.Println("done:", filepath.Base(path))
@@ -308,7 +312,7 @@ func main() {
 			if !ok {
 				return
 			}
-			if event.Op&fsnotify.Create != 0 {
+			if event.Op&(fsnotify.Create|fsnotify.Write) != 0 {
 				if last, exists := lastProcessed[event.Name]; exists && time.Since(last) < 10*time.Second {
 					continue
 				}
