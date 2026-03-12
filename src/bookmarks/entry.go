@@ -29,20 +29,20 @@ type BookmarkNode struct {
 	URL          string          `json:"url,omitempty"`
 }
 
-func Path() string {
+func Path(user string) string {
 	home, _ := os.UserHomeDir()
 	switch runtime.GOOS {
 	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", "Google", "Chrome", "Default", "Bookmarks")
+		return filepath.Join(home, "Library", "Application Support", "Google", "Chrome", user, "Bookmarks")
 	case "windows":
-		return filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data", "Default", "Bookmarks")
+		return filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data", user, "Bookmarks")
 	default:
-		return filepath.Join(home, ".config", "google-chrome", "Default", "Bookmarks")
+		return filepath.Join(home, ".config", "google-chrome", user, "Bookmarks")
 	}
 }
 
-func Read() (*BookmarkFile, error) {
-	data, err := os.ReadFile(Path())
+func Read(user string) (*BookmarkFile, error) {
+	data, err := os.ReadFile(Path(user))
 	if err != nil {
 		return nil, err
 	}
@@ -50,12 +50,12 @@ func Read() (*BookmarkFile, error) {
 	return &bf, json.Unmarshal(data, &bf)
 }
 
-func Write(bf *BookmarkFile) error {
+func Write(user string, bf *BookmarkFile) error {
 	data, err := json.MarshalIndent(bf, "", "   ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(Path(), data, 0644)
+	return os.WriteFile(Path(user), data, 0644)
 }
 
 func Add(bf *BookmarkFile, name, url string) {

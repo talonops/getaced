@@ -20,6 +20,12 @@ import (
 	"outplayed.dev/src/utils"
 )
 
+type Account struct {
+	Email    string
+	WatchDir string
+	Profile  string // Chrome profile directory name (e.g. "Profile 1")
+}
+
 var answersJSONSchema = &openai.ChatCompletionResponseFormatJSONSchema{
 	Name:   "answers",
 	Strict: true,
@@ -166,8 +172,8 @@ func getAnswersFromReference(ctx context.Context, client *openai.Client, referen
 	return parseAnswers(resp.Choices[0].Message.Content)
 }
 
-func updateBookmarksWithAnswers(answers []Answer) error {
-	bf, err := bookmarks.Read()
+func updateBookmarksWithAnswers(profile string, answers []Answer) error {
+	bf, err := bookmarks.Read(profile)
 	if err != nil {
 		return err
 	}
@@ -184,27 +190,64 @@ func updateBookmarksWithAnswers(answers []Answer) error {
 	}
 
 	bookmarks.AddFolder(bf, "school work", entries)
-	return bookmarks.Write(bf)
+	return bookmarks.Write(profile, bf)
 }
 
-func startChromeWithSync() {
+func startChromeWithSync(profile string) {
 	if runtime.GOOS != "darwin" {
 		exec.Command("pkill", "-f", "Xvfb").Run()
 		exec.Command("pkill", "-f", "google-chrome").Run()
 		time.Sleep(2 * time.Second)
 		exec.Command("Xvfb", ":99", "-screen", "0", "1024x768x24").Start()
 		time.Sleep(1 * time.Second)
-		cmd := exec.Command("google-chrome", "--no-sandbox", "--no-first-run", "--disable-gpu")
+		cmd := exec.Command("google-chrome",
+			"--no-sandbox", "--no-first-run", "--disable-gpu",
+			"--profile-directory="+profile,
+		)
 		cmd.Env = append(os.Environ(), "DISPLAY=:99")
 		cmd.Start()
-		log.Println("chrome started with Xvfb")
+		log.Println("chrome started with profile:", profile)
 	}
 }
 
-func processFile(ctx context.Context, client *openai.Client, path string) {
-	log.Println("processing:", filepath.Base(path))
+// findChromeProfile scans Chrome profile directories to find which one
+// is signed in with the given email.
+func findChromeProfile(email string) (string, error) {
+	home, _ := os.UserHomeDir()
+	var chromeDir string
+	switch runtime.GOOS {
+	case "darwin":
+		chromeDir = filepath.Join(home, "Library", "Application Support", "Google", "Chrome")
+	case "windows":
+		chromeDir = filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "User Data")
+	default:
+		chromeDir = filepath.Join(home, ".config", "google-chrome")
+	}
 
-	// removed wait for file to load
+	entries, err := os.ReadDir(chromeDir)
+	if err != nil {
+		return "", fmt.Errorf("read chrome dir: %w", err)
+	}
+
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		prefsPath := filepath.Join(chromeDir, e.Name(), "Preferences")
+		data, err := os.ReadFile(prefsPath)
+		if err != nil {
+			continue
+		}
+		// Look for the email in account_info
+		if strings.Contains(string(data), email) {
+			return e.Name(), nil
+		}
+	}
+	return "", fmt.Errorf("no chrome profile found for %s", email)
+}
+
+func processFile(ctx context.Context, client *openai.Client, acct *Account, path string) {
+	log.Printf("[%s] processing: %s", acct.Email, filepath.Base(path))
 
 	log.Println("ext:", filepath.Ext(path))
 	log.Println("isImage:", utils.IsImagePath(path))
@@ -252,14 +295,14 @@ func processFile(ctx context.Context, client *openai.Client, path string) {
 	}
 	time.Sleep(5 * time.Second)
 
-	if err := updateBookmarksWithAnswers(answers); err != nil {
-		log.Println("update bookmarks:", err)
+	if err := updateBookmarksWithAnswers(acct.Profile, answers); err != nil {
+		log.Printf("[%s] update bookmarks: %v", acct.Email, err)
 		return
 	}
 
-	startChromeWithSync()
+	startChromeWithSync(acct.Profile)
 
-	log.Println("done:", filepath.Base(path))
+	log.Printf("[%s] done: %s", acct.Email, filepath.Base(path))
 }
 
 func main() {
@@ -271,9 +314,27 @@ func main() {
 	}
 	client := openai.NewClient(apiKey)
 
-	watchDir := os.Getenv("OUTPLAYED_WATCH_DIR")
-	if watchDir == "" {
-		log.Fatal("OUTPLAYED_WATCH_DIR environment variable is required")
+	home, _ := os.UserHomeDir()
+
+	accounts := []Account{
+		{Email: "383997@eriesd.org", WatchDir: filepath.Join(home, "drive", "383997_eriesd.org", "school")},
+		{Email: "380307@eriesd.org", WatchDir: filepath.Join(home, "drive", "380307_eriesd.org", "school")},
+	}
+
+	// Discover Chrome profile for each account
+	for i := range accounts {
+		profile, err := findChromeProfile(accounts[i].Email)
+		if err != nil {
+			log.Fatalf("finding chrome profile for %s: %v", accounts[i].Email, err)
+		}
+		accounts[i].Profile = profile
+		log.Printf("account %s -> chrome profile %s", accounts[i].Email, profile)
+	}
+
+	// Build a map from watch dir to account for quick lookup
+	watchToAccount := make(map[string]*Account)
+	for i := range accounts {
+		watchToAccount[accounts[i].WatchDir] = &accounts[i]
 	}
 
 	watcher, err := fsnotify.NewWatcher()
@@ -282,11 +343,13 @@ func main() {
 	}
 	defer watcher.Close()
 
-	if err := watcher.Add(watchDir); err != nil {
-		log.Fatal(err)
+	for _, acct := range accounts {
+		if err := watcher.Add(acct.WatchDir); err != nil {
+			log.Fatalf("watch %s: %v", acct.WatchDir, err)
+		}
+		log.Println("watching:", acct.WatchDir)
 	}
 
-	log.Println("watching:", watchDir)
 	log.Println("platform:", runtime.GOOS)
 
 	for {
@@ -296,7 +359,13 @@ func main() {
 				return
 			}
 			if event.Op&fsnotify.Create != 0 {
-				processFile(ctx, client, event.Name)
+				dir := filepath.Dir(event.Name)
+				acct, ok := watchToAccount[dir]
+				if !ok {
+					log.Println("no account for dir:", dir)
+					continue
+				}
+				processFile(ctx, client, acct, event.Name)
 			}
 		case err, ok := <-watcher.Errors:
 			if !ok {
