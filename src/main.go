@@ -284,12 +284,14 @@ func processFile(ctx context.Context, client *openai.Client, acct *Account, path
 			log.Println("extract.py error:", err)
 			return
 		}
+		log.Printf("extract.py output (%d bytes): %s", len(output), string(output))
 
 		answers, err = getAnswersFromReference(ctx, client, string(output))
 		if err != nil {
 			log.Println("get answers:", err)
 			return
 		}
+		log.Printf("answers: %+v", answers)
 	} else {
 		log.Println("skipping unknown file type:", filepath.Base(path))
 		return
