@@ -203,6 +203,7 @@ func startChromeWithSync(profile string) {
 		cmd := exec.Command("google-chrome",
 			"--no-sandbox", "--no-first-run", "--disable-gpu",
 			"--profile-directory="+profile,
+			"--enable-sync",
 		)
 		cmd.Env = append(os.Environ(), "DISPLAY=:99")
 		cmd.Start()
