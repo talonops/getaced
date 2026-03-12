@@ -317,8 +317,8 @@ func main() {
 	home, _ := os.UserHomeDir()
 
 	accounts := []Account{
-		{Email: "383997@eriesd.org", WatchDir: filepath.Join(home, "drive", "383997_eriesd.org", "school")},
-		{Email: "380307@eriesd.org", WatchDir: filepath.Join(home, "drive", "380307_eriesd.org", "school")},
+		{Email: "383997@eriesd.org", WatchDir: filepath.Join(home, "drive", "383997_eriesd.org")},
+		{Email: "380307@eriesd.org", WatchDir: filepath.Join(home, "drive", "380307_eriesd.org")},
 	}
 
 	// Discover Chrome profile for each account
