@@ -307,6 +307,14 @@ func processFile(ctx context.Context, client *openai.Client, acct *Account, path
 		return
 	}
 
+	// Verify bookmarks were written
+	bPath := bookmarks.Path(acct.Profile)
+	log.Printf("[%s] bookmarks path: %s", acct.Email, bPath)
+	if data, err := os.ReadFile(bPath); err == nil {
+		log.Printf("[%s] bookmarks file size after write: %d bytes", acct.Email, len(data))
+		log.Printf("[%s] bookmarks content: %s", acct.Email, string(data))
+	}
+
 	startChromeWithSync(acct.Profile)
 
 	log.Printf("[%s] done: %s", acct.Email, filepath.Base(path))
