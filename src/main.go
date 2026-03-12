@@ -198,6 +198,12 @@ func startChromeWithSync(profile string) {
 		exec.Command("pkill", "-f", "Xvfb").Run()
 		exec.Command("pkill", "-f", "google-chrome").Run()
 		time.Sleep(2 * time.Second)
+
+		// Delete sync data so Chrome uploads local bookmarks instead of overwriting them
+		home, _ := os.UserHomeDir()
+		syncDataDir := filepath.Join(home, ".config", "google-chrome", profile, "Sync Data")
+		os.RemoveAll(syncDataDir)
+
 		exec.Command("Xvfb", ":99", "-screen", "0", "1024x768x24").Start()
 		time.Sleep(1 * time.Second)
 		cmd := exec.Command("google-chrome",
