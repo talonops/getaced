@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 
+	"getaced.io/src/structs"
+
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -17,11 +19,9 @@ func Init(dbPath string) error {
 		return fmt.Errorf("open database: %w", err)
 	}
 
-	/*
-		if err := DB.AutoMigrate(&Account{}, &ProcessedFile{}); err != nil {
-			return fmt.Errorf("auto migrate: %w", err)
-		}
-	*/
+	if err := DB.AutoMigrate(&structs.User{}); err != nil {
+		return fmt.Errorf("auto migrate: %w", err)
+	}
 
 	log.Println("database initialized:", dbPath)
 	return nil
