@@ -1,0 +1,1 @@
+GOOS=linux GOARCH=amd64 go build -o getaced ./src && scp getaced talon@151.247.22.11:~/ && echo "✅ deployed"

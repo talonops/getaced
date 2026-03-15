@@ -1,6 +1,8 @@
 package structs
 
 import (
+	"errors"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -51,4 +53,41 @@ type CheckoutResponse struct {
 type WebhookEvent struct {
 	EventType string                 `json:"event_type"`
 	Object    map[string]interface{} `json:"object"`
+}
+
+// PortPool is for containers port management
+type PortPool struct {
+	MU        sync.Mutex
+	Available []int          // [6081, 6082, ... 6100]
+	Used      map[int]string // port -> userID
+}
+
+func NewPortPool(start, count int) *PortPool {
+	ports := make([]int, count)
+	for i := range ports {
+		ports[i] = start + i // 6081, 6082, ..., 6100
+	}
+	return &PortPool{
+		Available: ports,
+		Used:      make(map[int]string),
+	}
+}
+
+func (p *PortPool) AcquirePort(userID string) (int, error) {
+	p.MU.Lock()
+	defer p.MU.Unlock()
+	if len(p.Available) == 0 {
+		return 0, errors.New("no ports available")
+	}
+	port := p.Available[0]
+	p.Available = p.Available[1:]
+	p.Used[port] = userID
+	return port, nil
+}
+
+func (p *PortPool) ReleasePort(port int) {
+	p.MU.Lock()
+	defer p.MU.Unlock()
+	delete(p.Used, port)
+	p.Available = append(p.Available, port)
 }
