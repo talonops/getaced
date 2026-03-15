@@ -21,11 +21,7 @@ func main() {
 	}
 
 	if err := containers.Init(); err != nil {
-		log.Fatal("failed to lxd client:", err)
-	}
-
-	if err := containers.Init(); err != nil {
-		log.Fatal("failed to lxd client:", err)
+		log.Fatal("failed to init containers:", err)
 	}
 
 	handler.CreemClient = creem.NewClient(

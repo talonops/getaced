@@ -55,39 +55,35 @@ type WebhookEvent struct {
 	Object    map[string]interface{} `json:"object"`
 }
 
-// PortPool is for containers port management
-type PortPool struct {
-	MU        sync.Mutex
-	Available []int          // [6081, 6082, ... 6100]
-	Used      map[int]string // port -> userID
+type IPPool struct {
+	mu   sync.Mutex
+	used map[int]bool
 }
 
-func NewPortPool(start, count int) *PortPool {
-	ports := make([]int, count)
-	for i := range ports {
-		ports[i] = start + i // 6081, 6082, ..., 6100
-	}
-	return &PortPool{
-		Available: ports,
-		Used:      make(map[int]string),
-	}
+func NewIPPool() *IPPool {
+	return &IPPool{used: make(map[int]bool)}
 }
 
-func (p *PortPool) AcquirePort(userID string) (int, error) {
-	p.MU.Lock()
-	defer p.MU.Unlock()
-	if len(p.Available) == 0 {
-		return 0, errors.New("no ports available")
-	}
-	port := p.Available[0]
-	p.Available = p.Available[1:]
-	p.Used[port] = userID
-	return port, nil
+func (p *IPPool) MarkUsed(suffix int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.used[suffix] = true
 }
 
-func (p *PortPool) ReleasePort(port int) {
-	p.MU.Lock()
-	defer p.MU.Unlock()
-	delete(p.Used, port)
-	p.Available = append(p.Available, port)
+func (p *IPPool) Acquire() (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i := 101; i <= 254; i++ {
+		if !p.used[i] {
+			p.used[i] = true
+			return i, nil
+		}
+	}
+	return 0, errors.New("no free IPs")
+}
+
+func (p *IPPool) Release(suffix int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.used, suffix)
 }

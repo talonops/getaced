@@ -23,6 +23,9 @@ func ChromeSession(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid onboarding step"})
 	}
 
+	// Clone the snapshot and configure, send back connect url
+	// Make sure to also set timer
+
 	return c.JSON(fiber.Map{
 		"id":                  user.ID,
 		"email":               user.Email,
