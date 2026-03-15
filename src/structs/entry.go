@@ -12,8 +12,8 @@ import (
 type OnboardingStep string
 
 const (
-	OnboardingStepChromeProfile OnboardingStep = "chrome_profile"
-	OnboardingStepComplete      OnboardingStep = "complete"
+	OnboardingStepChrome   OnboardingStep = "OnboardingStepChrome"
+	OnboardingStepComplete OnboardingStep = "complete"
 )
 
 // User is the main user model stored in SQLite
@@ -21,7 +21,7 @@ type User struct {
 	gorm.Model
 	GoogleID           string         `gorm:"uniqueIndex" json:"google_id"`
 	Email              string         `gorm:"uniqueIndex" json:"email"`
-	OnboardingStep     OnboardingStep `json:"onboarding_step"`
+	OnboardingStep     OnboardingStep `json:"onboarding_step" gorm:"default:OnboardingStepChrome"`
 	CreemCustomerID    string         `json:"creem_customer_id,omitempty"`
 	SubscriptionID     string         `json:"subscription_id,omitempty"`
 	SubscriptionStatus string         `json:"subscription_status,omitempty"`

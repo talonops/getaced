@@ -32,5 +32,11 @@ go.work.sum
 # .idea/
 # .vscode/
 
+# SSH key
+key
+
+# Built binary
+getaced
+
 # Other
 tmp/

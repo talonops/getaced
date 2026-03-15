@@ -21,5 +21,8 @@ func Routes(app *fiber.App) {
 	// Protected routes
 	protected := v1.Group("", middleware.AuthRequired)
 	protected.Get("/me", handler.GetMe)
+
+	protected.Post("/onboarding/chrome", handler.ChromeSession)
+
 	protected.Post("/checkout", handler.CreateCheckout)
 }
