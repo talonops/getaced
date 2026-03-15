@@ -55,6 +55,15 @@ type WebhookEvent struct {
 	Object    map[string]interface{} `json:"object"`
 }
 
+// SetupSession is used to store info while user is setting up chrome session
+type SetupSession struct {
+	UserID    uint
+	Container string
+	IPSuffix  int
+	CreatedAt time.Time
+}
+
+// IPPool is used to keep track of used ip suffixes (101-254)
 type IPPool struct {
 	mu   sync.Mutex
 	used map[int]bool

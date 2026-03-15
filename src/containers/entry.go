@@ -3,6 +3,10 @@ package containers
 import (
 	"fmt"
 	"log"
+	"sync"
+	"time"
+
+	"crypto/rand"
 
 	"getaced.io/src/structs"
 	lxd "github.com/canonical/lxd/client"
@@ -12,6 +16,17 @@ import (
 var Client lxd.InstanceServer
 var Snapshot *api.InstanceSnapshot
 var IPPool *structs.IPPool
+
+var Sessions = struct {
+	sync.Mutex
+	m map[string]*structs.SetupSession // token → session
+}{m: make(map[string]*structs.SetupSession)}
+
+func generateToken() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("%x", b)
+}
 
 func Init() error {
 	var err error
@@ -56,78 +71,74 @@ func Init() error {
 	return nil
 }
 
-func NewSession(userID string) (string, error) {
+func GetSession(token string) *structs.SetupSession {
+	Sessions.Lock()
+	defer Sessions.Unlock()
+	return Sessions.m[token]
+}
 
-	containerName := fmt.Sprintf("getaced-%s", userID)
-	IPSuffix := 123
+func NewSession(userID uint) (string, error) {
+	containerName := fmt.Sprintf("getaced-%d", userID)
+	IPSuffix, err := IPPool.Acquire()
+	token := generateToken()
+	if err != nil {
+		return "", fmt.Errorf("failed to acquire IP suffix for new session: %v", err)
+	}
 
+	// Clone from Snapshot
 	op, err := Client.CopyInstanceSnapshot(Client, "getaced-base", *Snapshot, &lxd.InstanceSnapshotCopyArgs{
 		Name: containerName,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to clone from snapshot: %v", err)
 	}
-
 	err = op.Wait()
 	if err != nil {
 		return "", fmt.Errorf("error waiting for clone operation: %v", err)
 	}
 
-	execReq := api.InstanceExecPost{
+	// Start
+	startOp, err := Client.UpdateInstanceState(containerName, api.InstanceStatePut{Action: "start"}, "")
+	if err != nil {
+		return "", fmt.Errorf("failed to start instance: %v", err)
+	}
+	if err := startOp.Wait(); err != nil {
+		return "", fmt.Errorf("error waiting for start: %v", err)
+	}
+
+	execOp, err := Client.ExecInstance(containerName, api.InstanceExecPost{
 		Command:     []string{"bash", "-c", fmt.Sprintf("cat > /etc/getaced.conf <<EOF\nIP_SUFFIX=%d\nEOF\n", IPSuffix)},
 		WaitForWS:   true,
 		Interactive: false,
-	}
-
-	execOp, err := Client.ExecInstance(containerName, execReq, nil)
+	}, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to exec into container: %v", err)
+		return "", fmt.Errorf("failed to write IP suffix to /etc/getaced.conf in container: %v", err)
 	}
 	if err := execOp.Wait(); err != nil {
-		return "", fmt.Errorf("error waiting for exec operation: %v", err)
+		return "", fmt.Errorf("error waiting for IP suffix write operation: %v", err)
 	}
 
-	// PORT 6080
+	// Put in setup mode
+	execOp, err = Client.ExecInstance(containerName, api.InstanceExecPost{
+		Command:     []string{"/root/start.sh", "setup"},
+		WaitForWS:   true,
+		Interactive: false,
+	}, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to exec into container for setup mode: %w", err)
+	}
+	if err := execOp.Wait(); err != nil {
+		return "", fmt.Errorf("failed to complete setup exec operation: %w", err)
+	}
 
-	return containerName, nil
+	Sessions.Lock()
+	Sessions.m[token] = &structs.SetupSession{
+		UserID:    userID,
+		Container: containerName,
+		IPSuffix:  IPSuffix,
+		CreatedAt: time.Now(),
+	}
+	Sessions.Unlock()
 
-	/*
-
-		startOp, err := Client.UpdateInstanceState(containerName, api.InstanceStatePut{Action: "start"}, "")
-		if err != nil {
-			log.Fatalf("failed to start instance: %v", err)
-		}
-		if err := startOp.Wait(); err != nil {
-			log.Fatalf("error waiting for start: %v", err)
-		}
-	*/
-
-	/*
-		// Create the new instance from the snapshot using the LXD client
-		op, err := Client.CopyInstanceSnapshot(containers.Client, "getaced-base", *snapshot, &lxd.InstanceSnapshotCopyArgs{
-			Name: "getaced-1234",
-		})
-		if err != nil {
-			log.Fatalf("failed to clone from snapshot: %v", err)
-		}
-
-		// Wait for the operation to complete
-		err = op.Wait()
-		if err != nil {
-			log.Fatalf("error waiting for clone operation: %v", err)
-		}
-
-		startOp, err := Client.UpdateInstanceState("getaced-1234", api.InstanceStatePut{Action: "start"}, "")
-		if err != nil {
-			log.Fatalf("failed to start instance: %v", err)
-		}
-		if err := startOp.Wait(); err != nil {
-			log.Fatalf("error waiting for start: %v", err)
-		}
-
-		execReq := api.InstanceExecPost{
-			Command: []string{"bash", "-c", "echo 'IP_SUFFIX=101\nVNC_PASS=abc123' > /etc/getaced.conf"},
-		}
-		containers.Client.ExecInstance("getaced-1234", execReq, nil)
-	*/
+	return token, nil
 }

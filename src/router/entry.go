@@ -22,7 +22,12 @@ func Routes(app *fiber.App) {
 	protected := v1.Group("", middleware.AuthRequired)
 	protected.Get("/me", handler.GetMe)
 
-	protected.Post("/onboarding/chrome", handler.ChromeSession)
+	protected.Post("/onboarding/chrome", handler.CreateSetupSession)
 
 	protected.Post("/checkout", handler.CreateCheckout)
+
+	// noVNC routes (public but token-protected)
+	v1.Get("/s/:token", handler.ChromeSession)
+	v1.Get("/ws/:token/*", handler.WSProxy)
+
 }

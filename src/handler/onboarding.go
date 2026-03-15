@@ -1,13 +1,16 @@
 package handler
 
 import (
+	"log"
+
+	"getaced.io/src/containers"
 	"getaced.io/src/database"
 	"getaced.io/src/structs"
 
 	"github.com/gofiber/fiber/v3"
 )
 
-func ChromeSession(c fiber.Ctx) error {
+func CreateSetupSession(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uint)
 
 	var user structs.User
@@ -23,14 +26,14 @@ func ChromeSession(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid onboarding step"})
 	}
 
-	// Clone the snapshot and configure, send back connect url
-	// Make sure to also set timer
+	token, err := containers.NewSession(userID)
+
+	if err != nil {
+		log.Printf("failed to create Chrome session for user %d: %v", userID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
 
 	return c.JSON(fiber.Map{
-		"id":                  user.ID,
-		"email":               user.Email,
-		"onboarding_step":     user.OnboardingStep,
-		"subscription_status": user.SubscriptionStatus,
-		"subscription_id":     user.SubscriptionID,
+		"session_url": "https://api.getaced.io/v1/s/" + token,
 	})
 }
