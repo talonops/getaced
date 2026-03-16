@@ -97,6 +97,20 @@ func NewSession(userID uint) (string, error) {
 		return "", fmt.Errorf("error waiting for clone operation: %v", err)
 	}
 
+	// Strip MAC so LXD generates a unique one
+	inst, etag, err := Client.GetInstance(containerName)
+	if err != nil {
+		return "", fmt.Errorf("failed to get instance config: %v", err)
+	}
+	delete(inst.Config, "volatile.eth0.hwaddr")
+	updateOp, err := Client.UpdateInstance(containerName, inst.Writable(), etag)
+	if err != nil {
+		return "", fmt.Errorf("failed to clear MAC address: %v", err)
+	}
+	if err := updateOp.Wait(); err != nil {
+		return "", fmt.Errorf("error waiting for MAC clear: %v", err)
+	}
+
 	// Start
 	startOp, err := Client.UpdateInstanceState(containerName, api.InstanceStatePut{Action: "start"}, "")
 	if err != nil {
@@ -121,14 +135,11 @@ func NewSession(userID uint) (string, error) {
 	// Put in setup mode
 	execOp, err = Client.ExecInstance(containerName, api.InstanceExecPost{
 		Command:     []string{"/root/start.sh", "setup"},
-		WaitForWS:   true,
+		WaitForWS:   false,
 		Interactive: false,
 	}, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to exec into container for setup mode: %w", err)
-	}
-	if err := execOp.Wait(); err != nil {
-		return "", fmt.Errorf("failed to complete setup exec operation: %w", err)
 	}
 
 	Sessions.Lock()

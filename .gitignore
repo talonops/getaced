@@ -36,7 +36,7 @@ go.work.sum
 ssh-key
 
 # Built binary
-./getaced
+getaced
 
 # Other
 tmp/
