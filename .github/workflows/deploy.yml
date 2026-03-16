@@ -17,5 +17,5 @@ jobs:
           script: |
             cd /home/talon/getaced
             git pull origin main
-            go build -o getaced ./src/...
+            CGO_ENABLED=1 go build -o getaced ./src/...
             sudo systemctl restart getaced

@@ -1,6 +1,6 @@
 {
 	"info": {
-		"name": "GetAced.io API",
+		"name": "api.getaced.io",
 		"description": "Base URL: https://api.getaced.io/v1\n\nAll protected routes need: Authorization: Bearer <token>\n\nFlow: Sign in → Link Drive → Chrome Setup → Complete Onboarding → Checkout → Set Watch Folder → Drop files\n\nTrials handled by Creem. 30 uses/month. Supported files: PNG, HTML.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
