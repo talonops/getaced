@@ -48,14 +48,26 @@ func execWait(containerName string, cmd []string) error {
 	return op.Wait()
 }
 
+func stopContainer(name string) error {
+	op, err := containers.Client.UpdateInstanceState(name, api.InstanceStatePut{Action: "stop", Force: true}, "")
+	if err != nil {
+		return fmt.Errorf("stop container: %w", err)
+	}
+	return op.Wait()
+}
+
+func startContainer(name string) error {
+	op, err := containers.Client.UpdateInstanceState(name, api.InstanceStatePut{Action: "start"}, "")
+	if err != nil {
+		return fmt.Errorf("start container: %w", err)
+	}
+	return op.Wait()
+}
+
 func UpdateBookmarks(containerName, folderName string, entries []BookmarkEntry) error {
 	const bookmarksPath = "/root/.config/google-chrome/Default/Bookmarks"
 
-	// Stop Chrome before editing bookmarks
-	if err := execWait(containerName, []string{"/root/start.sh", "stop"}); err != nil {
-		return fmt.Errorf("stop chrome: %w", err)
-	}
-
+	// 1. Read bookmarks while container is running
 	reader, _, err := containers.Client.GetInstanceFile(containerName, bookmarksPath)
 	if err != nil {
 		return fmt.Errorf("read bookmarks file: %w", err)
@@ -129,11 +141,19 @@ func UpdateBookmarks(containerName, folderName string, entries []BookmarkEntry) 
 		return fmt.Errorf("marshal bookmarks: %w", err)
 	}
 
+	// 2. Stop the container (kills Chrome so it releases bookmarks file)
+	if err := stopContainer(containerName); err != nil {
+		return fmt.Errorf("stop container: %w", err)
+	}
+
+	// 3. Write bookmarks while container is stopped
 	err = containers.Client.CreateInstanceFile(containerName, bookmarksPath, lxd.InstanceFileArgs{
 		Content: strings.NewReader(string(output)),
 		Type:    "file",
 	})
 	if err != nil {
+		// Try to restart even if write fails
+		startContainer(containerName)
 		return fmt.Errorf("write bookmarks file: %w", err)
 	}
 
@@ -141,12 +161,17 @@ func UpdateBookmarks(containerName, folderName string, entries []BookmarkEntry) 
 }
 
 func SyncChrome(containerName string) error {
-	// Start Chrome back up, then run sync
-	if err := execWait(containerName, []string{"/root/start.sh", "start"}); err != nil {
-		return fmt.Errorf("start chrome: %w", err)
+	// Start container back up
+	if err := startContainer(containerName); err != nil {
+		return fmt.Errorf("start container: %w", err)
 	}
+	// Run sync
 	if err := execWait(containerName, []string{"/root/start.sh", "sync"}); err != nil {
 		return fmt.Errorf("sync chrome: %w", err)
+	}
+	// Stop container after sync is done
+	if err := stopContainer(containerName); err != nil {
+		return fmt.Errorf("stop container after sync: %w", err)
 	}
 	return nil
 }
