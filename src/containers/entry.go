@@ -1,17 +1,19 @@
 package containers
 
 import (
+	"crypto/rand"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
-
-	"crypto/rand"
 
 	"getaced.io/src/structs"
 	lxd "github.com/canonical/lxd/client"
 	"github.com/canonical/lxd/shared/api"
 )
+
+var StartScript []byte
 
 var Client lxd.InstanceServer
 var IPPool *structs.IPPool
@@ -137,20 +139,27 @@ func NewSession(userID uint) (string, error) {
 		return "", fmt.Errorf("error waiting for start: %v", err)
 	}
 
-	execOp, err := Client.ExecInstance(containerName, api.InstanceExecPost{
-		Command:     []string{"bash", "-c", fmt.Sprintf("cat > /etc/getaced.conf <<EOF\nIP_SUFFIX=%d\nEOF\n", ipSuffix)},
-		WaitForWS:   true,
-		Interactive: false,
-	}, nil)
+	// Write IP config
+	err = Client.CreateInstanceFile(containerName, "/etc/getaced.conf", lxd.InstanceFileArgs{
+		Content: strings.NewReader(fmt.Sprintf("IP_SUFFIX=%d\n", ipSuffix)),
+		Type:    "file",
+	})
 	if err != nil {
-		return "", fmt.Errorf("failed to write IP suffix to /etc/getaced.conf in container: %v", err)
+		return "", fmt.Errorf("failed to write getaced.conf: %v", err)
 	}
-	if err := execOp.Wait(); err != nil {
-		return "", fmt.Errorf("error waiting for IP suffix write operation: %v", err)
+
+	// Inject start.sh from repo
+	err = Client.CreateInstanceFile(containerName, "/root/start.sh", lxd.InstanceFileArgs{
+		Content: strings.NewReader(string(StartScript)),
+		Type:    "file",
+		Mode:    0755,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to inject start.sh: %v", err)
 	}
 
 	// Put in setup mode
-	execOp, err = Client.ExecInstance(containerName, api.InstanceExecPost{
+	_, err = Client.ExecInstance(containerName, api.InstanceExecPost{
 		Command:     []string{"/root/start.sh", "setup"},
 		WaitForWS:   false,
 		Interactive: false,

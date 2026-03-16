@@ -48,6 +48,12 @@ func main() {
 		log.Fatal("failed to init database:", err)
 	}
 
+	startScript, err := os.ReadFile("scripts/start.sh")
+	if err != nil {
+		log.Fatal("failed to read scripts/start.sh:", err)
+	}
+	containers.StartScript = startScript
+
 	if err := containers.Init(); err != nil {
 		log.Fatal("failed to init containers:", err)
 	}

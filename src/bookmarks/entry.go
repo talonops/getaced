@@ -168,6 +168,15 @@ func SyncChrome(containerName string) error {
 	if err := startContainer(containerName); err != nil {
 		return fmt.Errorf("start container: %w", err)
 	}
+	// Inject latest start.sh
+	err := containers.Client.CreateInstanceFile(containerName, "/root/start.sh", lxd.InstanceFileArgs{
+		Content: strings.NewReader(string(containers.StartScript)),
+		Type:    "file",
+		Mode:    0755,
+	})
+	if err != nil {
+		return fmt.Errorf("inject start.sh: %w", err)
+	}
 	// Run sync
 	if err := execWait(containerName, []string{"/root/start.sh", "sync"}); err != nil {
 		return fmt.Errorf("sync chrome: %w", err)

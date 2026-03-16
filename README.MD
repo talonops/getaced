@@ -1,13 +1,67 @@
-Basically this tool scans google drive for changes in a folder, and then feeds that image into
-a LLM, and extracts the question number, and answer. Then it will create a bookmark on the chromebooks
-account, and put the answer as "1. A", and onwards.
+# api.getaced.io
 
-so if its a .png then we will just answer 1
+Scans a Google Drive folder for PNG/HTML files, feeds them into GPT, extracts answers, and syncs them as Chrome bookmarks in an LXD container.
 
-implement resources so you can pass in resources it can reference
+## Quick Commands
 
-OPENAI_API_KEY=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 OUTPLAYED_WATCH_DIR="/Users/yourbaba4life/Library/CloudStorage/GoogleDrive-383997@eriesd.org/My Drive/school" go run src/main.go
+```bash
+# Run locally
+go run src/main.go
 
-OPENAI_API_KEY=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 OUTPLAYED_WATCH_DIR=/home/talon/drive/school ./main
+# Build
+go build -o getaced ./src/...
 
-kill $(lsof -ti :3000)
+# Kill port
+kill $(lsof -ti :80)
+```
+
+## LXD Container Commands
+
+```bash
+# List containers
+lxc list
+
+# Shell into a container
+lxc exec getaced-1 -- bash
+
+# Check container bookmarks
+lxc file pull getaced-1/root/.config/google-chrome/Default/Bookmarks -
+
+# Start/stop container
+lxc start getaced-1
+lxc stop getaced-1
+
+# Delete a user container
+lxc stop getaced-1 --force && lxc delete getaced-1
+
+# View base container files
+lxc file pull getaced-base/root/start.sh -
+```
+
+## Database
+
+SQLite at `./getaced.db`
+
+```bash
+# Open db
+sqlite3 getaced.db
+
+# Useful queries
+SELECT id, email, onboarding_step, subscription_status, usage_count FROM users;
+SELECT * FROM processed_files ORDER BY created_at DESC LIMIT 10;
+```
+
+## Deploy
+
+```bash
+# On VPS
+cd /root/getaced && git pull && go build -o getaced ./src/... && systemctl restart getaced
+```
+
+## Env
+
+Copy `.env.example` to `.env`. See `.env.example` for all required vars.
+
+## API
+
+Import `getaced.postman_collection.json` into Postman/Bruno for all endpoints.
