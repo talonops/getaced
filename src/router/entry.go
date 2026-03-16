@@ -18,8 +18,8 @@ func Routes(app *fiber.App) {
 	v1.Get("/auth/google", handler.GoogleAuth)
 	v1.Get("/auth/google/callback", handler.GoogleCallback)
 
-	// Drive OAuth (auth required to initiate, callback is public)
-	v1.Get("/auth/google/drive", middleware.AuthRequired, handler.DriveAuth)
+	// Drive OAuth (payment required to initiate, callback is public)
+	v1.Get("/auth/google/drive", middleware.AuthRequired, middleware.PaymentRequired, handler.DriveAuth)
 	v1.Get("/auth/google/drive/callback", handler.DriveCallback)
 
 	// Public webhooks
@@ -34,9 +34,11 @@ func Routes(app *fiber.App) {
 
 	// Protected routes
 	v1.Get("/me", middleware.AuthRequired, handler.GetMe)
-	v1.Post("/onboarding/chrome", middleware.AuthRequired, handler.CreateSetupSession)
-	v1.Post("/onboarding/complete", middleware.AuthRequired, handler.CompleteOnboarding)
 	v1.Post("/checkout", middleware.AuthRequired, handler.CreateCheckout)
+
+	// Onboarding (payment required)
+	v1.Post("/onboarding/chrome", middleware.AuthRequired, middleware.PaymentRequired, handler.CreateSetupSession)
+	v1.Post("/onboarding/complete", middleware.AuthRequired, middleware.PaymentRequired, handler.CompleteOnboarding)
 
 	// Settings (payment required)
 	v1.Get("/settings", middleware.AuthRequired, middleware.PaymentRequired, handler.GetSettings)

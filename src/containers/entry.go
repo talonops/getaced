@@ -100,6 +100,21 @@ func NewSession(userID uint) (string, error) {
 		}
 	}()
 
+	// Delete existing container if it exists (e.g. user retrying setup)
+	if _, _, err := Client.GetInstance(containerName); err == nil {
+		stopOp, err := Client.UpdateInstanceState(containerName, api.InstanceStatePut{Action: "stop", Force: true}, "")
+		if err == nil {
+			stopOp.Wait()
+		}
+		delOp, err := Client.DeleteInstance(containerName, false)
+		if err != nil {
+			return "", fmt.Errorf("failed to delete existing container: %v", err)
+		}
+		if err := delOp.Wait(); err != nil {
+			return "", fmt.Errorf("error waiting for container deletion: %v", err)
+		}
+	}
+
 	// Copy base container (not snapshot)
 	source, _, err := Client.GetInstance("getaced-base")
 	if err != nil {
