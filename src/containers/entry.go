@@ -183,17 +183,37 @@ func NewSession(userID uint) (string, error) {
 	return token, nil
 }
 
-// CleanupExpiredSessions removes VNC sessions that have expired.
-// The LXD container is NOT deleted - only the VNC access is revoked.
+// CleanupExpiredSessions removes expired VNC sessions, stops the container, and releases the IP.
 func CleanupExpiredSessions() {
 	Sessions.Lock()
-	defer Sessions.Unlock()
-
+	var expired []*structs.SetupSession
+	var expiredTokens []string
 	now := time.Now()
 	for token, session := range Sessions.m {
 		if now.After(session.ExpiresAt) {
-			log.Printf("session expired for user %d (container %s), revoking VNC access", session.UserID, session.Container)
-			delete(Sessions.m, token)
+			expired = append(expired, session)
+			expiredTokens = append(expiredTokens, token)
 		}
+	}
+	for _, token := range expiredTokens {
+		delete(Sessions.m, token)
+	}
+	Sessions.Unlock()
+
+	// Stop containers and release IPs outside the lock
+	for _, session := range expired {
+		log.Printf("session expired for user %d (container %s), stopping container", session.UserID, session.Container)
+
+		// Stop the container (kills Chrome, VNC, everything)
+		op, err := Client.UpdateInstanceState(session.Container, api.InstanceStatePut{Action: "stop", Force: true}, "")
+		if err != nil {
+			log.Printf("containers: failed to stop expired session container %s: %v", session.Container, err)
+		} else if err := op.Wait(); err != nil {
+			log.Printf("containers: error waiting for stop of %s: %v", session.Container, err)
+		}
+
+		// Release IP back to the pool
+		IPPool.Release(session.IPSuffix)
+		log.Printf("containers: released IP suffix %d from expired session (user %d)", session.IPSuffix, session.UserID)
 	}
 }
