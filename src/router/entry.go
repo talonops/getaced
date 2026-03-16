@@ -12,7 +12,7 @@ import (
 func Routes(app *fiber.App) {
 	v1 := app.Group("/v1", logger.New())
 	app.Get("/novnc/*", static.New("/home/talon/novnc-static"))
-	app.Get("/docs", static.New("/home/talon/getaced/docs/api.getaced.io-documentation.html"))
+	app.Use("/docs", static.New("./docs/api.getaced.io-documentation.html"))
 
 	// Public auth routes
 	v1.Get("/auth/google", handler.GoogleAuth)
