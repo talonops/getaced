@@ -42,6 +42,8 @@ func ChromeSession(c fiber.Ctx) error {
 </html>`, token)
 
 	c.Set("Content-Type", "text/html")
+	c.Set("X-Frame-Options", "ALLOWALL")
+	c.Set("Content-Security-Policy", "frame-ancestors *")
 	return c.SendString(html)
 }
 
