@@ -1,0 +1,203 @@
+{
+  "info": {
+    "name": "GetAced API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://api.getaced.io/v1"
+    },
+    {
+      "key": "token",
+      "value": ""
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Google Sign In (open in browser)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/auth/google",
+            "description": "Open this in a browser, not Postman. Copy the token from the redirect URL."
+          }
+        },
+        {
+          "name": "Get Drive Auth URL",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/auth/google/drive",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "item": [
+        {
+          "name": "Get Me",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/me",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Onboarding",
+      "item": [
+        {
+          "name": "Create Chrome Session",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/onboarding/chrome",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}" }]
+            }
+          }
+        },
+        {
+          "name": "Complete Onboarding",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/onboarding/complete",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payment",
+      "item": [
+        {
+          "name": "Create Checkout",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/checkout",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}" }]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_id\": \"prod_xxxxx\",\n  \"success_url\": \"https://getaced.io/dashboard?payment=success\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "item": [
+        {
+          "name": "Get Settings",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/settings",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}" }]
+            }
+          }
+        },
+        {
+          "name": "Set Watch Folder",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/settings/watch-folder",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}" }]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folder_id\": \"YOUR_DRIVE_FOLDER_ID_HERE\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Set Bookmark Folder",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/settings/bookmark-folder",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}" }]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folder_name\": \"school work\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Set Custom Prompt",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/settings/prompt",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}" }]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"custom_prompt\": \"This is AP Chemistry\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Usage",
+      "item": [
+        {
+          "name": "Get Usage",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/usage",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}" }]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -144,6 +144,17 @@ func processUser(user structs.User) error {
 		folderName = "school work"
 	}
 
+	// Reset usage if the reset period has passed
+	if user.UsageResetAt != nil && time.Now().After(*user.UsageResetAt) {
+		newReset := time.Now().Add(30 * 24 * time.Hour)
+		database.DB.Model(&user).Updates(map[string]interface{}{
+			"usage_count":    0,
+			"usage_reset_at": &newReset,
+		})
+		user.UsageCount = 0
+		user.UsageResetAt = &newReset
+	}
+
 	for _, file := range files {
 		if user.UsageCount >= 30 {
 			log.Printf("worker: user %d reached usage limit", user.ID)
