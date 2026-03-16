@@ -1,0 +1,15 @@
+[Unit]
+Description=GetAced API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/talon/getaced
+ExecStart=/home/talon/getaced/getaced
+Restart=always
+RestartSec=3
+EnvironmentFile=/home/talon/getaced/.env
+
+[Install]
+WantedBy=multi-user.target
