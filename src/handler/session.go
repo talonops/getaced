@@ -1,18 +1,14 @@
 package handler
 
 import (
-	"bufio"
-	"bytes"
 	"fmt"
-	"io"
 	"log"
-	"net"
 	"net/http"
 	"strings"
-	"time"
 
 	"getaced.io/src/containers"
 	"github.com/gofiber/fiber/v3"
+	"github.com/gorilla/websocket"
 )
 
 func ChromeSession(c fiber.Ctx) error {
@@ -48,104 +44,81 @@ func ChromeSession(c fiber.Ctx) error {
 	return c.SendString(html)
 }
 
-func WSProxy(c fiber.Ctx) error {
+var clientUpgrader = websocket.Upgrader{
+	CheckOrigin:  func(r *http.Request) bool { return true },
+	Subprotocols: []string{"binary"},
+}
 
-	log.Printf("WSProxy: Connection: %s", string(c.RequestCtx().Request.Header.Peek("Connection")))
-	log.Printf("WSProxy: Upgrade: %s", string(c.RequestCtx().Request.Header.Peek("Upgrade")))
-	log.Printf("WSProxy: WS-Key: %s", string(c.RequestCtx().Request.Header.Peek("Sec-WebSocket-Key")))
-	log.Printf("WSProxy: WS-Protocol: %s", string(c.RequestCtx().Request.Header.Peek("Sec-WebSocket-Protocol")))
-
-	token := c.Params("token")
+func WSProxyHTTP(w http.ResponseWriter, r *http.Request) {
+	// Extract token from /v1/ws/{token}/websockify
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) < 4 {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+	token := parts[3]
 
 	session := containers.GetSession(token)
 	if session == nil {
-		return c.Status(404).SendString("Session expired or invalid")
+		http.Error(w, "Session expired or invalid", http.StatusNotFound)
+		return
 	}
 
-	target := fmt.Sprintf("10.246.29.%d:6080", session.IPSuffix)
-	log.Printf("WSProxy: proxying token=%s to %s", token, target)
+	target := fmt.Sprintf("ws://10.246.29.%d:6080/websockify", session.IPSuffix)
+	log.Printf("WSProxyHTTP: proxying token=%s to %s", token, target)
 
-	// Grab websocket headers from the browser's request
-	reqCtx := c.RequestCtx()
-	wsKey := string(reqCtx.Request.Header.Peek("Sec-WebSocket-Key"))
-	wsVersion := string(reqCtx.Request.Header.Peek("Sec-WebSocket-Version"))
-	wsProtocol := string(reqCtx.Request.Header.Peek("Sec-WebSocket-Protocol"))
-
-	if wsKey == "" {
-		return c.Status(400).SendString("Not a websocket request")
+	// Upgrade client connection
+	clientConn, err := clientUpgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("WSProxyHTTP: client upgrade failed: %v", err)
+		return
 	}
+	defer clientConn.Close()
 
 	// Dial the container's websockify
-	serverConn, err := net.Dial("tcp", target)
+	dialer := websocket.Dialer{
+		Subprotocols: []string{"binary"},
+	}
+	serverConn, _, err := dialer.Dial(target, nil)
 	if err != nil {
-		log.Printf("WSProxy: failed to dial container: %v", err)
-		return c.Status(502).SendString("Container not reachable")
+		log.Printf("WSProxyHTTP: failed to dial container: %v", err)
+		return
 	}
+	defer serverConn.Close()
 
-	// Build a websocket upgrade request using the browser's same key
-	var upgradeReq strings.Builder
-	upgradeReq.WriteString("GET /websockify HTTP/1.1\r\n")
-	upgradeReq.WriteString(fmt.Sprintf("Host: %s\r\n", target))
-	upgradeReq.WriteString("Upgrade: websocket\r\n")
-	upgradeReq.WriteString("Connection: Upgrade\r\n")
-	upgradeReq.WriteString(fmt.Sprintf("Sec-WebSocket-Key: %s\r\n", wsKey))
-	upgradeReq.WriteString(fmt.Sprintf("Sec-WebSocket-Version: %s\r\n", wsVersion))
-	if wsProtocol != "" {
-		upgradeReq.WriteString(fmt.Sprintf("Sec-WebSocket-Protocol: %s\r\n", wsProtocol))
-	}
-	upgradeReq.WriteString("\r\n")
+	// Bidirectional proxy
+	done := make(chan struct{})
 
-	// Send upgrade to container
-	if _, err := serverConn.Write([]byte(upgradeReq.String())); err != nil {
-		serverConn.Close()
-		return c.Status(502).SendString("Failed to upgrade container")
-	}
+	// server -> client
+	go func() {
+		defer close(done)
+		for {
+			msgType, msg, err := serverConn.ReadMessage()
+			if err != nil {
+				if !websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+					log.Printf("WSProxyHTTP: server read error: %v", err)
+				}
+				return
+			}
+			if err := clientConn.WriteMessage(msgType, msg); err != nil {
+				return
+			}
+		}
+	}()
 
-	// Read container's 101 response
-	serverConn.SetReadDeadline(time.Now().Add(5 * time.Second))
-	serverBuf := bufio.NewReader(serverConn)
-	resp, err := http.ReadResponse(serverBuf, nil)
-	if err != nil || resp.StatusCode != 101 {
-		serverConn.Close()
-		log.Printf("WSProxy: container upgrade failed: %v (status: %d)", err, resp.StatusCode)
-		return c.Status(502).SendString("Container upgrade failed")
-	}
-	serverConn.SetReadDeadline(time.Time{})
-
-	// Rebuild the 101 response to forward to browser
-	var clientResp bytes.Buffer
-	clientResp.WriteString("HTTP/1.1 101 Switching Protocols\r\n")
-	for k, vs := range resp.Header {
-		for _, v := range vs {
-			clientResp.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
+	// client -> server
+	for {
+		msgType, msg, err := clientConn.ReadMessage()
+		if err != nil {
+			if !websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+				log.Printf("WSProxyHTTP: client read error: %v", err)
+			}
+			break
+		}
+		if err := serverConn.WriteMessage(msgType, msg); err != nil {
+			break
 		}
 	}
-	clientResp.WriteString("\r\n")
 
-	// Hijack the browser connection — fasthttp hands us the raw TCP socket
-	reqCtx.HijackSetNoResponse(true)
-	reqCtx.Hijack(func(clientConn net.Conn) {
-		defer clientConn.Close()
-		defer serverConn.Close()
-
-		// Send the 101 to the browser
-		clientConn.Write(clientResp.Bytes())
-
-		// If websockify already sent data with the 101, forward it
-		if serverBuf.Buffered() > 0 {
-			buffered, _ := serverBuf.Peek(serverBuf.Buffered())
-			clientConn.Write(buffered)
-		}
-
-		// Pipe raw bytes both directions
-		done := make(chan struct{})
-		go func() {
-			io.Copy(clientConn, serverConn)
-			close(done)
-		}()
-		io.Copy(serverConn, clientConn)
-		<-done
-	})
-
-	return nil
+	<-done
 }

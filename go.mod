@@ -6,6 +6,7 @@ require (
 	github.com/canonical/lxd v0.0.0-20260313172212-344f47232c73
 	github.com/gofiber/fiber/v3 v3.1.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/gorilla/websocket v1.5.1
 	github.com/joho/godotenv v1.5.1
 	golang.org/x/oauth2 v0.36.0
 	gorm.io/driver/sqlite v1.6.0
@@ -24,7 +25,6 @@ require (
 	github.com/gofiber/utils/v2 v2.0.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
-	github.com/gorilla/websocket v1.5.1 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/compress v1.18.4 // indirect

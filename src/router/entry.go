@@ -20,9 +20,8 @@ func Routes(app *fiber.App) {
 	// Public webhook
 	v1.Post("/webhooks/creem", handler.CreemWebhook)
 
-	// noVNC routes (public but token-protected)
+	// noVNC session page (public but token-protected)
 	v1.Get("/s/:token", handler.ChromeSession)
-	v1.Get("/ws/:token/*", handler.WSProxy)
 
 	// Protected routes
 	v1.Get("/me", middleware.AuthRequired, handler.GetMe)
