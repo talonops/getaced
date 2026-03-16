@@ -19,10 +19,22 @@ func Init(dbPath string) error {
 		return fmt.Errorf("open database: %w", err)
 	}
 
-	if err := DB.AutoMigrate(&structs.User{}, &structs.ProcessedFile{}); err != nil {
+	if err := DB.AutoMigrate(&structs.User{}, &structs.ProcessedFile{}, &structs.ProcessedWebhookEvent{}, &structs.FailedFile{}); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)
 	}
 
 	log.Println("database initialized:", dbPath)
 	return nil
+}
+
+func Close() {
+	sqlDB, err := DB.DB()
+	if err != nil {
+		log.Printf("database: failed to get underlying db: %v", err)
+		return
+	}
+	if err := sqlDB.Close(); err != nil {
+		log.Printf("database: failed to close: %v", err)
+	}
+	log.Println("database closed")
 }

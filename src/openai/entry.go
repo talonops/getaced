@@ -31,11 +31,14 @@ type Client struct {
 	Model  string
 }
 
-func NewClient(apiKey string) *Client {
+func NewClient(apiKey, model string) *Client {
+	if model == "" {
+		model = "gpt-4o"
+	}
 	return &Client{
 		APIKey: apiKey,
 		HTTP:   &http.Client{},
-		Model:  "gpt-5.4",
+		Model:  model,
 	}
 }
 

@@ -2,14 +2,17 @@ package handler
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"getaced.io/src/config"
 	"getaced.io/src/creem"
 	"getaced.io/src/database"
 	"getaced.io/src/structs"
+	"getaced.io/src/worker"
 
 	"github.com/gofiber/fiber/v3"
+	"gorm.io/gorm"
 )
 
 var CreemClient *creem.Client
@@ -59,6 +62,13 @@ func CreemWebhook(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	}
 
+	// Idempotency check: skip if already processed
+	eventKey := event.EventType + ":" + subscriptionID
+	var existing structs.ProcessedWebhookEvent
+	if err := database.DB.Where("event_id = ?", eventKey).First(&existing).Error; err == nil {
+		return c.SendStatus(fiber.StatusOK) // already processed
+	}
+
 	// Try to find user by creem_customer_id first
 	var user structs.User
 	err := database.DB.Where("creem_customer_id = ?", customerID).First(&user).Error
@@ -72,24 +82,37 @@ func CreemWebhook(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	}
 
-	switch event.EventType {
-	case "checkout.completed":
-		database.DB.Model(&user).Updates(map[string]interface{}{
-			"creem_customer_id": customerID,
-			"subscription_id":   subscriptionID,
-		})
-	case "subscription.active", "subscription.paid":
-		now := time.Now()
-		database.DB.Model(&user).Updates(map[string]interface{}{
-			"subscription_status":  "active",
-			"subscription_paid_at": &now,
-		})
-	case "subscription.canceled":
-		database.DB.Model(&user).Update("subscription_status", "canceled")
-	case "subscription.past_due":
-		database.DB.Model(&user).Update("subscription_status", "past_due")
-	case "subscription.expired":
-		database.DB.Model(&user).Update("subscription_status", "expired")
+	// Process in a transaction for atomicity
+	txErr := database.DB.Transaction(func(tx *gorm.DB) error {
+		switch event.EventType {
+		case "checkout.completed":
+			tx.Model(&user).Updates(map[string]interface{}{
+				"creem_customer_id": customerID,
+				"subscription_id":   subscriptionID,
+			})
+		case "subscription.active", "subscription.paid":
+			now := time.Now()
+			tx.Model(&user).Updates(map[string]interface{}{
+				"subscription_status":  "active",
+				"subscription_paid_at": &now,
+			})
+		case "subscription.canceled":
+			tx.Model(&user).Update("subscription_status", "canceled")
+			go worker.StopUserWatch(user)
+		case "subscription.past_due":
+			tx.Model(&user).Update("subscription_status", "past_due")
+		case "subscription.expired":
+			tx.Model(&user).Update("subscription_status", "expired")
+			go worker.StopUserWatch(user)
+		}
+
+		// Record event as processed
+		tx.Create(&structs.ProcessedWebhookEvent{EventID: eventKey})
+		return nil
+	})
+
+	if txErr != nil {
+		log.Printf("creem webhook transaction error: %v", txErr)
 	}
 
 	return c.SendStatus(fiber.StatusOK)

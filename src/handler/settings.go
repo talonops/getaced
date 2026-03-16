@@ -8,6 +8,7 @@ import (
 	"getaced.io/src/database"
 	"getaced.io/src/drive"
 	"getaced.io/src/structs"
+	"getaced.io/src/worker"
 
 	"github.com/gofiber/fiber/v3"
 )
@@ -63,6 +64,11 @@ func UpdateWatchFolder(c fiber.Ctx) error {
 	}
 
 	database.DB.Model(&user).Update("watch_folder_id", body.FolderID)
+
+	// Register Drive push notifications (best effort — fallback poll covers failures)
+	if err := worker.RegisterUserWatch(user, srv); err != nil {
+		log.Printf("failed to register drive watch for user %d: %v", userID, err)
+	}
 
 	return c.JSON(fiber.Map{"watch_folder_id": body.FolderID})
 }

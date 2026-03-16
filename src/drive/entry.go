@@ -19,6 +19,7 @@ type DriveFile struct {
 	Name     string
 	MimeType string
 	Modified time.Time
+	Parents  []string
 }
 
 func OAuthConfig() *oauth2.Config {
@@ -105,6 +106,84 @@ func DownloadFile(srv *drive.Service, fileID string) ([]byte, string, error) {
 	}
 
 	return data, file.MimeType, nil
+}
+
+// GetStartPageToken returns the initial page token for the Changes API
+func GetStartPageToken(srv *drive.Service) (string, error) {
+	res, err := srv.Changes.GetStartPageToken().Do()
+	if err != nil {
+		return "", fmt.Errorf("get start page token: %w", err)
+	}
+	return res.StartPageToken, nil
+}
+
+// RegisterWatch registers a push notification channel for Drive changes
+func RegisterWatch(srv *drive.Service, channelID, webhookURL, pageToken, channelToken string) (int64, error) {
+	channel := &drive.Channel{
+		Id:         channelID,
+		Type:       "web_hook",
+		Address:    webhookURL,
+		Token:      channelToken,
+		Expiration: time.Now().Add(7 * 24 * time.Hour).UnixMilli(),
+	}
+	res, err := srv.Changes.Watch(pageToken, channel).Do()
+	if err != nil {
+		return 0, fmt.Errorf("register watch: %w", err)
+	}
+	return res.Expiration, nil
+}
+
+// StopWatch stops a previously registered push notification channel
+func StopWatch(srv *drive.Service, channelID, resourceID string) error {
+	err := srv.Channels.Stop(&drive.Channel{
+		Id:         channelID,
+		ResourceId: resourceID,
+	}).Do()
+	if err != nil {
+		return fmt.Errorf("stop watch: %w", err)
+	}
+	return nil
+}
+
+// ListChanges returns changed files since the given page token
+func ListChanges(srv *drive.Service, pageToken string) ([]DriveFile, string, error) {
+	var files []DriveFile
+	currentToken := pageToken
+
+	for {
+		res, err := srv.Changes.List(currentToken).
+			Fields("nextPageToken, newStartPageToken, changes(file(id,name,mimeType,modifiedTime,parents),removed)").
+			PageSize(100).
+			Do()
+		if err != nil {
+			return nil, "", fmt.Errorf("list changes: %w", err)
+		}
+
+		for _, change := range res.Changes {
+			if change.Removed || change.File == nil {
+				continue
+			}
+			mime := change.File.MimeType
+			if mime != "image/png" && mime != "text/html" {
+				continue
+			}
+			modified, _ := time.Parse(time.RFC3339, change.File.ModifiedTime)
+			f := DriveFile{
+				ID:       change.File.Id,
+				Name:     change.File.Name,
+				MimeType: mime,
+				Modified: modified,
+			}
+			// Store parents so caller can filter by folder
+			f.Parents = change.File.Parents
+			files = append(files, f)
+		}
+
+		if res.NewStartPageToken != "" {
+			return files, res.NewStartPageToken, nil
+		}
+		currentToken = res.NextPageToken
+	}
 }
 
 func ValidateFolder(srv *drive.Service, folderID string) error {

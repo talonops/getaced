@@ -34,6 +34,11 @@ type User struct {
 	BookmarkFolderName string `gorm:"default:school work" json:"bookmark_folder_name,omitempty"`
 	CustomPrompt       string `gorm:"type:text" json:"custom_prompt,omitempty"`
 
+	// Drive push notifications
+	DrivePageToken     string     `json:"drive_page_token,omitempty"`
+	DriveChannelID     string     `json:"drive_channel_id,omitempty"`
+	DriveChannelExpiry *time.Time `json:"drive_channel_expiry,omitempty"`
+
 	// Payment enforcement
 	UsageCount   int        `json:"usage_count" gorm:"default:0"`
 	UsageResetAt *time.Time `json:"usage_reset_at,omitempty"`
@@ -79,9 +84,11 @@ type SetupSession struct {
 // ProcessedFile tracks Drive files already processed to avoid reprocessing
 type ProcessedFile struct {
 	gorm.Model
-	UserID   uint   `gorm:"index"`
-	FileID   string `gorm:"index"`
-	FileName string
+	UserID      uint   `gorm:"index"`
+	FileID      string `gorm:"index"`
+	FileName    string
+	AnswerCount int    `json:"answer_count" gorm:"default:0"`
+	Answers     string `json:"answers" gorm:"type:text"`
 }
 
 // AnswerResult is a single extracted answer from GPT
@@ -93,6 +100,21 @@ type AnswerResult struct {
 // AnswerResponse is the full GPT response with all answers
 type AnswerResponse struct {
 	Answers []AnswerResult `json:"answers"`
+}
+
+// ProcessedWebhookEvent tracks Creem webhook events to ensure idempotency
+type ProcessedWebhookEvent struct {
+	gorm.Model
+	EventID string `gorm:"uniqueIndex"`
+}
+
+// FailedFile tracks files that failed processing to limit retries
+type FailedFile struct {
+	gorm.Model
+	UserID   uint   `gorm:"index"`
+	FileID   string `gorm:"index"`
+	FileName string
+	Failures int `gorm:"default:0"`
 }
 
 // IPPool is used to keep track of used ip suffixes (101-254)

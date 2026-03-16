@@ -14,7 +14,6 @@ import (
 )
 
 var Client lxd.InstanceServer
-var Snapshot *api.InstanceSnapshot
 var IPPool *structs.IPPool
 
 var Sessions = struct {
@@ -24,7 +23,9 @@ var Sessions = struct {
 
 func generateToken() string {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		log.Printf("containers: crypto/rand error: %v", err)
+	}
 	return fmt.Sprintf("%x", b)
 }
 
@@ -35,9 +36,10 @@ func Init() error {
 		return fmt.Errorf("failed to connect to LXD: %v", err)
 	}
 
-	Snapshot, _, err = Client.GetInstanceSnapshot("getaced-base", "ready")
+	// Verify base container exists
+	_, _, err = Client.GetInstance("getaced-base")
 	if err != nil {
-		return fmt.Errorf("failed to get instance snapshot 'getaced-base/ready': %v", err)
+		return fmt.Errorf("failed to get base container 'getaced-base': %v", err)
 	}
 
 	IPPool = structs.NewIPPool()
@@ -51,13 +53,15 @@ func Init() error {
 			continue
 		}
 		if inst.StatusCode == api.Running {
-			// Read the IP suffix from container config
 			content, _, err := Client.GetInstanceFile(inst.Name, "/etc/getaced.conf")
 			if err != nil {
 				continue
 			}
 			buf := make([]byte, 256)
-			n, _ := content.Read(buf)
+			n, err := content.Read(buf)
+			if err != nil || n == 0 {
+				continue
+			}
 			var suffix int
 			fmt.Sscanf(string(buf[:n]), "IP_SUFFIX=%d", &suffix)
 			if suffix >= 101 && suffix <= 254 {
@@ -79,22 +83,35 @@ func GetSession(token string) *structs.SetupSession {
 
 func NewSession(userID uint) (string, error) {
 	containerName := fmt.Sprintf("getaced-%d", userID)
-	IPSuffix, err := IPPool.Acquire()
 	token := generateToken()
+
+	ipSuffix, err := IPPool.Acquire()
 	if err != nil {
 		return "", fmt.Errorf("failed to acquire IP suffix for new session: %v", err)
 	}
 
-	// Clone from Snapshot
-	op, err := Client.CopyInstanceSnapshot(Client, "getaced-base", *Snapshot, &lxd.InstanceSnapshotCopyArgs{
+	// Release IP on any error
+	success := false
+	defer func() {
+		if !success {
+			IPPool.Release(ipSuffix)
+		}
+	}()
+
+	// Copy base container (not snapshot)
+	source, _, err := Client.GetInstance("getaced-base")
+	if err != nil {
+		return "", fmt.Errorf("failed to get base container: %v", err)
+	}
+
+	op, err := Client.CopyInstance(Client, *source, &lxd.InstanceCopyArgs{
 		Name: containerName,
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to clone from snapshot: %v", err)
+		return "", fmt.Errorf("failed to copy container: %v", err)
 	}
-	err = op.Wait()
-	if err != nil {
-		return "", fmt.Errorf("error waiting for clone operation: %v", err)
+	if err := op.Wait(); err != nil {
+		return "", fmt.Errorf("error waiting for copy operation: %v", err)
 	}
 
 	// Strip MAC so LXD generates a unique one
@@ -121,7 +138,7 @@ func NewSession(userID uint) (string, error) {
 	}
 
 	execOp, err := Client.ExecInstance(containerName, api.InstanceExecPost{
-		Command:     []string{"bash", "-c", fmt.Sprintf("cat > /etc/getaced.conf <<EOF\nIP_SUFFIX=%d\nEOF\n", IPSuffix)},
+		Command:     []string{"bash", "-c", fmt.Sprintf("cat > /etc/getaced.conf <<EOF\nIP_SUFFIX=%d\nEOF\n", ipSuffix)},
 		WaitForWS:   true,
 		Interactive: false,
 	}, nil)
@@ -147,12 +164,13 @@ func NewSession(userID uint) (string, error) {
 	Sessions.m[token] = &structs.SetupSession{
 		UserID:    userID,
 		Container: containerName,
-		IPSuffix:  IPSuffix,
+		IPSuffix:  ipSuffix,
 		CreatedAt: now,
 		ExpiresAt: now.Add(5 * time.Minute),
 	}
 	Sessions.Unlock()
 
+	success = true
 	return token, nil
 }
 

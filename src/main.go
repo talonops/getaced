@@ -15,6 +15,7 @@ import (
 	"getaced.io/src/router"
 	"getaced.io/src/worker"
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/joho/godotenv"
 )
 
@@ -30,6 +31,7 @@ func validateConfig() {
 		"CREEM_BASE_URL",
 		"OPENAI_API_KEY",
 		"DRIVE_TOKEN_ENCRYPT_KEY",
+		"WEBHOOK_BASE_URL",
 	}
 	for _, key := range required {
 		if config.Config(key) == "" {
@@ -55,10 +57,26 @@ func main() {
 		config.Config("CREEM_API_KEY"),
 	)
 
-	openaiClient := openai.NewClient(config.Config("OPENAI_API_KEY"))
+	openaiClient := openai.NewClient(
+		config.Config("OPENAI_API_KEY"),
+		config.Config("OPENAI_MODEL"),
+	)
+	worker.RegisterCleanupHook(handler.CleanupExpiredOAuthStates)
 	worker.Start(openaiClient)
 
 	app := fiber.New()
+
+	// CORS — allow frontend origin
+	frontendURL := config.Config("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "https://getaced.io"
+	}
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: []string{frontendURL},
+		AllowHeaders: []string{"Authorization", "Content-Type"},
+		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+	}))
+
 	router.Routes(app)
 
 	port := config.Config("APP_PORT")
@@ -75,6 +93,7 @@ func main() {
 		log.Println("shutting down...")
 		worker.Stop()
 		app.Shutdown()
+		database.Close()
 	}()
 
 	log.Fatal(app.Listen(":" + port))

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"strings"
 	"time"
 
@@ -153,7 +154,9 @@ func UpdateBookmarks(containerName, folderName string, entries []BookmarkEntry) 
 	})
 	if err != nil {
 		// Try to restart even if write fails
-		startContainer(containerName)
+		if startErr := startContainer(containerName); startErr != nil {
+			log.Printf("bookmarks: failed to restart container %s after write failure: %v", containerName, startErr)
+		}
 		return fmt.Errorf("write bookmarks file: %w", err)
 	}
 

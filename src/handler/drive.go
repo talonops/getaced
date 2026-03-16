@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"crypto/rand"
 	"fmt"
 	"log"
+	"sync"
+	"time"
 
 	"getaced.io/src/config"
 	"getaced.io/src/crypto"
@@ -13,6 +16,24 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"golang.org/x/oauth2"
 )
+
+type oauthState struct {
+	UserID    uint
+	ExpiresAt time.Time
+}
+
+var driveOAuthStates = struct {
+	sync.Mutex
+	m map[string]oauthState
+}{m: make(map[string]oauthState)}
+
+func generateStateToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", b), nil
+}
 
 func DriveAuth(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uint)
@@ -26,9 +47,21 @@ func DriveAuth(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid onboarding step"})
 	}
 
+	stateToken, err := generateStateToken()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to generate state"})
+	}
+
+	driveOAuthStates.Lock()
+	driveOAuthStates.m[stateToken] = oauthState{
+		UserID:    userID,
+		ExpiresAt: time.Now().Add(10 * time.Minute),
+	}
+	driveOAuthStates.Unlock()
+
 	cfg := drive.OAuthConfig()
 	url := cfg.AuthCodeURL(
-		fmt.Sprintf("drive:%d", userID),
+		stateToken,
 		oauth2.AccessTypeOffline,
 		oauth2.SetAuthURLParam("prompt", "consent"),
 	)
@@ -43,10 +76,19 @@ func DriveCallback(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing code"})
 	}
 
-	var userID uint
-	if _, err := fmt.Sscanf(state, "drive:%d", &userID); err != nil || userID == 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid state"})
+	// Validate state token
+	driveOAuthStates.Lock()
+	s, ok := driveOAuthStates.m[state]
+	if ok {
+		delete(driveOAuthStates.m, state) // single-use
 	}
+	driveOAuthStates.Unlock()
+
+	if !ok || time.Now().After(s.ExpiresAt) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid or expired state"})
+	}
+
+	userID := s.UserID
 
 	cfg := drive.OAuthConfig()
 	token, err := cfg.Exchange(c.Context(), code)
@@ -76,4 +118,16 @@ func DriveCallback(c fiber.Ctx) error {
 	}
 
 	return c.Redirect().To(frontendURL + "/onboarding?step=chrome")
+}
+
+// CleanupExpiredOAuthStates removes expired state tokens from memory
+func CleanupExpiredOAuthStates() {
+	driveOAuthStates.Lock()
+	defer driveOAuthStates.Unlock()
+	now := time.Now()
+	for token, state := range driveOAuthStates.m {
+		if now.After(state.ExpiresAt) {
+			delete(driveOAuthStates.m, token)
+		}
+	}
 }
