@@ -19,20 +19,23 @@ func ChromeSession(c fiber.Ctx) error {
 <html>
 <head>
 <title>GetAced - Chrome Setup</title>
-<style>body{margin:0;overflow:hidden;background:#000}</style>
+<style>
+    html,body{margin:0;padding:0;width:100%%;height:100%%;overflow:hidden;background:#000}
+    #vnc{width:100%%;height:100%%}
+</style>
 </head>
 <body>
+<div id="vnc"></div>
 <script type="module">
     import RFB from '/novnc/core/rfb.js';
     const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
     const url = proto + location.host + '/v1/ws/%s/websockify';
     console.log('Connecting to:', url);
-    const rfb = new RFB(document.body, url, { shared: true, credentials: { password: '' } });
+    const rfb = new RFB(document.getElementById('vnc'), url, { wsProtocols: ['binary'] });
     rfb.scaleViewport = true;
     rfb.resizeSession = true;
     rfb.addEventListener('connect', () => console.log('RFB connected'));
     rfb.addEventListener('disconnect', (e) => console.log('RFB disconnected', e.detail));
-    rfb.addEventListener('credentialsrequired', () => console.log('RFB credentials required'));
     rfb.addEventListener('securityfailure', (e) => console.log('RFB security failure', e.detail));
 </script>
 </body>
