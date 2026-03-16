@@ -46,4 +46,10 @@ func Routes(app *fiber.App) {
 	// Usage & activity (payment required)
 	v1.Get("/usage", middleware.AuthRequired, middleware.PaymentRequired, handler.GetUsage)
 	v1.Get("/activity", middleware.AuthRequired, middleware.PaymentRequired, handler.GetActivity)
+
+	// Account management
+	v1.Delete("/account", middleware.AuthRequired, handler.DeleteAccount)
+
+	// Health check
+	v1.Get("/health", handler.Health)
 }

@@ -32,6 +32,16 @@ func OAuthConfig() *oauth2.Config {
 	}
 }
 
+func NewServiceFromToken(token *oauth2.Token) (*drive.Service, error) {
+	cfg := OAuthConfig()
+	client := cfg.Client(context.Background(), token)
+	srv, err := drive.NewService(context.Background(), option.WithHTTPClient(client))
+	if err != nil {
+		return nil, fmt.Errorf("create drive service: %w", err)
+	}
+	return srv, nil
+}
+
 func NewServiceFromRefreshToken(refreshToken string) (*drive.Service, error) {
 	cfg := OAuthConfig()
 	token := &oauth2.Token{RefreshToken: refreshToken}

@@ -22,6 +22,9 @@ type User struct {
 	gorm.Model
 	GoogleID           string         `gorm:"uniqueIndex" json:"google_id"`
 	Email              string         `gorm:"uniqueIndex" json:"email"`
+	Name               string         `json:"name,omitempty"`
+	AvatarURL          string         `json:"avatar_url,omitempty"`
+	LastActiveAt       *time.Time     `json:"last_active_at,omitempty"`
 	OnboardingStep     OnboardingStep `json:"onboarding_step" gorm:"default:OnboardingStepDrive"`
 	CreemCustomerID    string         `json:"creem_customer_id,omitempty"`
 	SubscriptionID     string         `json:"subscription_id,omitempty"`
@@ -29,6 +32,7 @@ type User struct {
 	SubscriptionPaidAt *time.Time     `json:"subscription_paid_at,omitempty"`
 
 	// Drive integration
+	DriveEmail         string `json:"drive_email,omitempty"`
 	DriveRefreshToken  string `gorm:"type:text" json:"-"`
 	WatchFolderID      string `json:"watch_folder_id,omitempty"`
 	BookmarkFolderName string `gorm:"default:school work" json:"bookmark_folder_name,omitempty"`
@@ -49,6 +53,7 @@ type User struct {
 type GoogleResponse struct {
 	ID       string `json:"id"`
 	Email    string `json:"email"`
+	Name     string `json:"name"`
 	Verified bool   `json:"verified_email"`
 	Picture  string `json:"picture"`
 }

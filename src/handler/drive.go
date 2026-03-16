@@ -101,6 +101,28 @@ func DriveCallback(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "no refresh token received"})
 	}
 
+	// Check that this Drive account isn't already linked to another user
+	srv, err := drive.NewServiceFromToken(token)
+	if err != nil {
+		log.Printf("drive service from token error: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to verify drive account"})
+	}
+	about, err := srv.About.Get().Fields("user(emailAddress)").Do()
+	if err != nil {
+		log.Printf("drive about error: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to verify drive account"})
+	}
+	driveEmail := about.User.EmailAddress
+
+	var existingUser structs.User
+	if err := database.DB.Where("id != ? AND drive_email = ?", userID, driveEmail).First(&existingUser).Error; err == nil {
+		frontendURL := config.Config("FRONTEND_URL")
+		if frontendURL == "" {
+			frontendURL = "https://getaced.io"
+		}
+		return c.Redirect().To(frontendURL + "/onboarding?step=drive&error=drive_already_linked")
+	}
+
 	encryptedToken, err := crypto.Encrypt(token.RefreshToken, config.Config("DRIVE_TOKEN_ENCRYPT_KEY"))
 	if err != nil {
 		log.Printf("encrypt refresh token error: %v", err)
@@ -109,6 +131,7 @@ func DriveCallback(c fiber.Ctx) error {
 
 	database.DB.Model(&structs.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
 		"drive_refresh_token": encryptedToken,
+		"drive_email":         driveEmail,
 		"onboarding_step":     structs.OnboardingStepChrome,
 	})
 

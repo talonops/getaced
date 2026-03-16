@@ -1,0 +1,205 @@
+{
+	"info": {
+		"name": "GetAced.io API",
+		"description": "Base URL: https://api.getaced.io/v1\n\nAll protected routes need: Authorization: Bearer <token>\n\nFlow: Sign in → Link Drive → Chrome Setup → Complete Onboarding → Checkout → Set Watch Folder → Drop files\n\nTrials handled by Creem. 30 uses/month. Supported files: PNG, HTML.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{jwt_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{ "key": "base_url", "value": "https://api.getaced.io/v1" },
+		{ "key": "jwt_token", "value": "" },
+		{ "key": "monthly_product_id", "value": "" },
+		{ "key": "yearly_product_id", "value": "" }
+	],
+	"item": [
+		{
+			"name": "Public",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] },
+						"description": "Returns {\"status\": \"ok\"}"
+					}
+				},
+				{
+					"name": "Google Sign In (open in browser)",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "GET",
+						"url": { "raw": "{{base_url}}/auth/google", "host": ["{{base_url}}"], "path": ["auth", "google"] },
+						"description": "Redirects to Google consent screen. After login redirects to:\n{FRONTEND_URL}/auth/callback?token=<jwt>\n\nOpen in browser. Copy token from URL, set as jwt_token variable."
+					}
+				}
+			]
+		},
+		{
+			"name": "Onboarding",
+			"description": "Steps: 1. Link Drive → 2. Chrome Setup → 3. Complete",
+			"item": [
+				{
+					"name": "1. Get Drive Auth URL",
+					"request": {
+						"method": "GET",
+						"url": { "raw": "{{base_url}}/auth/google/drive", "host": ["{{base_url}}"], "path": ["auth", "google", "drive"] },
+						"description": "Returns Google Drive OAuth URL. User must be on step OnboardingStepDrive.\n\nResponse: {\"url\": \"https://accounts.google.com/...\"}\n\nOpen URL in browser. After consent, redirects to {FRONTEND_URL}/onboarding?step=chrome\n\nPrevents duplicate Drive accounts — if this Drive is already linked to another user, returns error."
+					}
+				},
+				{
+					"name": "2. Create Chrome Setup Session",
+					"request": {
+						"method": "POST",
+						"url": { "raw": "{{base_url}}/onboarding/chrome", "host": ["{{base_url}}"], "path": ["onboarding", "chrome"] },
+						"description": "Creates Chrome container with VNC. User must be on step OnboardingStepChrome.\n\nResponse: {\"session_url\": \"https://api.getaced.io/v1/s/abc123\"}\n\nOpen session_url in browser/iframe. 5 min window. User signs into Google in Chrome."
+					}
+				},
+				{
+					"name": "3. Complete Onboarding",
+					"request": {
+						"method": "POST",
+						"url": { "raw": "{{base_url}}/onboarding/complete", "host": ["{{base_url}}"], "path": ["onboarding", "complete"] },
+						"description": "Marks onboarding done. Call after Chrome setup.\n\nResponse: {\"onboarding_step\": \"complete\"}"
+					}
+				}
+			]
+		},
+		{
+			"name": "Payment",
+			"item": [
+				{
+					"name": "Checkout (Monthly)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"product_id\": \"{{monthly_product_id}}\",\n  \"success_url\": \"https://getaced.io/dashboard?payment=success\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/checkout", "host": ["{{base_url}}"], "path": ["checkout"] },
+						"description": "Creates Creem checkout for monthly plan. Creem handles 1-week free trial.\n\nResponse: {\"checkout_url\": \"https://checkout.creem.io/...\"}\n\nRedirect user to checkout_url."
+					}
+				},
+				{
+					"name": "Checkout (Yearly)",
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"product_id\": \"{{yearly_product_id}}\",\n  \"success_url\": \"https://getaced.io/dashboard?payment=success\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/checkout", "host": ["{{base_url}}"], "path": ["checkout"] },
+						"description": "Creates Creem checkout for yearly plan.\n\nResponse: {\"checkout_url\": \"https://checkout.creem.io/...\"}"
+					}
+				}
+			]
+		},
+		{
+			"name": "User",
+			"item": [
+				{
+					"name": "Get Me",
+					"request": {
+						"method": "GET",
+						"url": { "raw": "{{base_url}}/me", "host": ["{{base_url}}"], "path": ["me"] },
+						"description": "Full user profile.\n\nResponse:\n{\n  \"id\": 1,\n  \"email\": \"student@gmail.com\",\n  \"name\": \"John Doe\",\n  \"avatar_url\": \"https://lh3.googleusercontent.com/...\",\n  \"onboarding_step\": \"complete\" | \"OnboardingStepDrive\" | \"OnboardingStepChrome\",\n  \"subscription_status\": \"trialing\" | \"active\" | \"canceled\" | \"past_due\" | \"expired\" | \"\",\n  \"subscription_id\": \"sub_xxx\",\n  \"has_drive_connected\": true,\n  \"watch_folder_id\": \"1aBcDeFg...\",\n  \"bookmark_folder_name\": \"school work\",\n  \"usage_count\": 5,\n  \"usage_limit\": 30,\n  \"is_trialing\": false,\n  \"is_subscription_active\": true,\n  \"is_active\": true\n}\n\nUse onboarding_step to route user to correct page.\nUse is_active to gate features."
+					}
+				},
+				{
+					"name": "Delete Account",
+					"request": {
+						"method": "DELETE",
+						"url": { "raw": "{{base_url}}/account", "host": ["{{base_url}}"], "path": ["account"] },
+						"description": "Permanently deletes user, their Chrome container, Drive watch, and all processed files.\n\nResponse: {\"message\": \"account deleted\"}"
+					}
+				}
+			]
+		},
+		{
+			"name": "Settings",
+			"description": "All require active subscription or trial (402 if not).",
+			"item": [
+				{
+					"name": "Get Settings",
+					"request": {
+						"method": "GET",
+						"url": { "raw": "{{base_url}}/settings", "host": ["{{base_url}}"], "path": ["settings"] },
+						"description": "Response:\n{\n  \"watch_folder_id\": \"1aBcDeFg...\",\n  \"bookmark_folder_name\": \"school work\",\n  \"custom_prompt\": \"\",\n  \"has_drive_connected\": true\n}"
+					}
+				},
+				{
+					"name": "Set Watch Folder",
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"folder_id\": \"PASTE_DRIVE_FOLDER_ID_HERE\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/settings/watch-folder", "host": ["{{base_url}}"], "path": ["settings", "watch-folder"] },
+						"description": "Sets which Drive folder to monitor. Also registers Drive push notifications.\n\nfolder_id from: https://drive.google.com/drive/folders/<THIS_PART>\n\nValidates folder exists.\n\nResponse: {\"watch_folder_id\": \"...\"}\n\n400 if folder not found or Drive not connected."
+					}
+				},
+				{
+					"name": "Set Bookmark Folder",
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"folder_name\": \"school work\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/settings/bookmark-folder", "host": ["{{base_url}}"], "path": ["settings", "bookmark-folder"] },
+						"description": "Sets Chrome bookmark folder name where answers appear. Default: \"school work\".\n\nResponse: {\"bookmark_folder_name\": \"...\"}"
+					}
+				},
+				{
+					"name": "Set Custom Prompt",
+					"request": {
+						"method": "PUT",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"custom_prompt\": \"This is AP Chemistry, use proper notation\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/settings/prompt", "host": ["{{base_url}}"], "path": ["settings", "prompt"] },
+						"description": "Appended to AI system prompt. Send empty string to clear.\n\nResponse: {\"custom_prompt\": \"...\"}"
+					}
+				}
+			]
+		},
+		{
+			"name": "Usage & Activity",
+			"description": "Require active subscription or trial (402 if not).",
+			"item": [
+				{
+					"name": "Get Usage",
+					"request": {
+						"method": "GET",
+						"url": { "raw": "{{base_url}}/usage", "host": ["{{base_url}}"], "path": ["usage"] },
+						"description": "Response:\n{\n  \"usage_count\": 5,\n  \"usage_limit\": 30,\n  \"usage_reset_at\": \"2026-04-15T00:00:00Z\",\n  \"subscription_status\": \"active\",\n  \"is_trialing\": false,\n  \"is_subscription_active\": true,\n  \"is_active\": true\n}"
+					}
+				},
+				{
+					"name": "Get Activity",
+					"request": {
+						"method": "GET",
+						"url": { "raw": "{{base_url}}/activity", "host": ["{{base_url}}"], "path": ["activity"] },
+						"description": "Last 20 processed files with answers.\n\nResponse:\n{\n  \"activity\": [\n    {\n      \"file_name\": \"Screenshot.png\",\n      \"answer_count\": 5,\n      \"answers\": [{\"number\": 1, \"answer\": \"A\"}, ...],\n      \"processed_at\": \"2026-03-15T22:49:20Z\"\n    }\n  ]\n}"
+					}
+				}
+			]
+		}
+	]
+}

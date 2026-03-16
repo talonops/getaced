@@ -154,13 +154,11 @@ func processPendingUsers(ctx context.Context) {
 }
 
 func processAllUsers(ctx context.Context) {
-	now := time.Now()
-
 	var users []structs.User
 	database.DB.Where(
 		"drive_refresh_token != '' AND watch_folder_id != '' AND usage_count < ? AND "+
-			"(subscription_status = 'active' OR (trial_ends_at IS NOT NULL AND trial_ends_at > ?))",
-		30, now,
+			"subscription_status IN ('active','trialing')",
+		30,
 	).Find(&users)
 
 	if len(users) == 0 {
@@ -442,8 +440,8 @@ func renewExpiringWatches() {
 	database.DB.Where(
 		"drive_channel_id != '' AND drive_channel_expiry IS NOT NULL AND drive_channel_expiry < ? AND "+
 			"drive_refresh_token != '' AND watch_folder_id != '' AND "+
-			"(subscription_status = 'active' OR (trial_ends_at IS NOT NULL AND trial_ends_at > ?))",
-		cutoff, time.Now(),
+			"subscription_status IN ('active','trialing')",
+		cutoff,
 	).Find(&users)
 
 	for _, user := range users {

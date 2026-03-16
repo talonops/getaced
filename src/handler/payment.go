@@ -96,6 +96,8 @@ func CreemWebhook(c fiber.Ctx) error {
 				"subscription_status":  "active",
 				"subscription_paid_at": &now,
 			})
+		case "subscription.trialing":
+			tx.Model(&user).Update("subscription_status", "trialing")
 		case "subscription.canceled":
 			tx.Model(&user).Update("subscription_status", "canceled")
 			go worker.StopUserWatch(user)

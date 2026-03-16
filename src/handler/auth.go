@@ -38,21 +38,25 @@ func GoogleCallback(c fiber.Ctx) error {
 	result := database.DB.Where("google_id = ?", userInfo.ID).First(&user)
 	if result.Error != nil {
 		now := time.Now()
-		trialEnds := now.Add(7 * 24 * time.Hour)
 		usageReset := now.Add(30 * 24 * time.Hour)
 
 		user = structs.User{
 			GoogleID:           userInfo.ID,
 			Email:              userInfo.Email,
+			Name:               userInfo.Name,
+			AvatarURL:          userInfo.Picture,
 			BookmarkFolderName: "school work",
-			TrialEndsAt:        &trialEnds,
 			UsageResetAt:       &usageReset,
 		}
 		if err := database.DB.Create(&user).Error; err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to create user"})
 		}
 	} else {
-		database.DB.Model(&user).Update("email", userInfo.Email)
+		database.DB.Model(&user).Updates(map[string]interface{}{
+			"email":      userInfo.Email,
+			"name":       userInfo.Name,
+			"avatar_url": userInfo.Picture,
+		})
 	}
 
 	// Generate JWT

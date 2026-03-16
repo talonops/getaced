@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"time"
-
 	"getaced.io/src/database"
 	"getaced.io/src/structs"
 
@@ -17,13 +15,14 @@ func GetMe(c fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "user not found"})
 	}
 
-	now := time.Now()
-	isTrialActive := user.TrialEndsAt != nil && user.TrialEndsAt.After(now)
+	isTrialing := user.SubscriptionStatus == "trialing"
 	isSubActive := user.SubscriptionStatus == "active"
 
 	return c.JSON(fiber.Map{
 		"id":                     user.ID,
 		"email":                  user.Email,
+		"name":                   user.Name,
+		"avatar_url":             user.AvatarURL,
 		"onboarding_step":        user.OnboardingStep,
 		"subscription_status":    user.SubscriptionStatus,
 		"subscription_id":        user.SubscriptionID,
@@ -32,9 +31,8 @@ func GetMe(c fiber.Ctx) error {
 		"bookmark_folder_name":   user.BookmarkFolderName,
 		"usage_count":            user.UsageCount,
 		"usage_limit":            30,
-		"trial_ends_at":          user.TrialEndsAt,
-		"is_trial_active":        isTrialActive,
+		"is_trialing":            isTrialing,
 		"is_subscription_active": isSubActive,
-		"is_active":              isTrialActive || isSubActive,
+		"is_active":              isTrialing || isSubActive,
 	})
 }

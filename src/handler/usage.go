@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"time"
-
 	"getaced.io/src/database"
 	"getaced.io/src/structs"
 
@@ -19,8 +17,7 @@ func GetUsage(c fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "user not found"})
 	}
 
-	now := time.Now()
-	isTrialActive := user.TrialEndsAt != nil && user.TrialEndsAt.After(now)
+	isTrialing := user.SubscriptionStatus == "trialing"
 	isSubActive := user.SubscriptionStatus == "active"
 
 	return c.JSON(fiber.Map{
@@ -28,9 +25,8 @@ func GetUsage(c fiber.Ctx) error {
 		"usage_limit":            UsageLimit,
 		"usage_reset_at":         user.UsageResetAt,
 		"subscription_status":    user.SubscriptionStatus,
-		"trial_ends_at":          user.TrialEndsAt,
-		"is_trial_active":        isTrialActive,
+		"is_trialing":            isTrialing,
 		"is_subscription_active": isSubActive,
-		"is_active":              isTrialActive || isSubActive,
+		"is_active":              isTrialing || isSubActive,
 	})
 }

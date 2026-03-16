@@ -31,11 +31,10 @@ func PaymentRequired(c fiber.Ctx) error {
 		user.UsageCount = 0
 	}
 
-	// Check active subscription or trial
-	isTrialActive := user.TrialEndsAt != nil && user.TrialEndsAt.After(now)
-	isSubActive := user.SubscriptionStatus == "active"
+	// Check active subscription or trial (Creem handles trials via "trialing" status)
+	isSubActive := user.SubscriptionStatus == "active" || user.SubscriptionStatus == "trialing"
 
-	if !isTrialActive && !isSubActive {
+	if !isSubActive {
 		return c.Status(fiber.StatusPaymentRequired).JSON(fiber.Map{
 			"error":   "subscription required",
 			"message": "Please subscribe or start a free trial to use this feature",
