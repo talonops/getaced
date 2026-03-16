@@ -78,7 +78,7 @@ func main() {
 		frontendURL = "https://getaced.io"
 	}
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: []string{frontendURL},
+		AllowOrigins: []string{frontendURL, "http://localhost:3000"},
 		AllowHeaders: []string{"Authorization", "Content-Type"},
 		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 	}))
