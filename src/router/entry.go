@@ -23,6 +23,9 @@ func Routes(app *fiber.App) {
 	// noVNC session page (public but token-protected)
 	v1.Get("/s/:token", handler.ChromeSession)
 
+	// Internal: nginx auth_request to resolve WS token → container IP
+	v1.Get("/internal/resolve-ws", handler.ResolveWS)
+
 	// Protected routes
 	v1.Get("/me", middleware.AuthRequired, handler.GetMe)
 	v1.Post("/onboarding/chrome", middleware.AuthRequired, handler.CreateSetupSession)

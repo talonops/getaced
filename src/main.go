@@ -2,9 +2,6 @@ package main
 
 import (
 	"log"
-	"net/http"
-	"net/http/httputil"
-	"net/url"
 
 	"getaced.io/src/config"
 	"getaced.io/src/containers"
@@ -32,31 +29,13 @@ func main() {
 		config.Config("CREEM_API_KEY"),
 	)
 
-	appPort := config.Config("APP_PORT")
-	if appPort == "" {
-		appPort = "80"
-	}
-
-	wsPort := config.Config("WS_PORT")
-	if wsPort == "" {
-		wsPort = "81"
-	}
-
 	app := fiber.New()
 	router.Routes(app)
 
-	// WS proxy on a secondary port
-	fiberTarget, _ := url.Parse("http://127.0.0.1:" + appPort)
-	proxy := httputil.NewSingleHostReverseProxy(fiberTarget)
-	http.HandleFunc("/v1/ws/", handler.WSProxyHTTP)
-	http.Handle("/", proxy)
-	go func() {
-		log.Printf("ws proxy listening on :%s (proxying rest to fiber :%s)", wsPort, appPort)
-		if err := http.ListenAndServe(":"+wsPort, nil); err != nil {
-			log.Fatal("ws proxy failed:", err)
-		}
-	}()
+	port := config.Config("APP_PORT")
+	if port == "" {
+		port = "80"
+	}
 
-	log.Printf("fiber listening on :%s", appPort)
-	log.Fatal(app.Listen(":" + appPort))
+	log.Fatal(app.Listen(":" + port))
 }
