@@ -1,0 +1,152 @@
+package bookmarks
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"time"
+
+	"getaced.io/src/containers"
+	"getaced.io/src/structs"
+
+	lxd "github.com/canonical/lxd/client"
+	"github.com/canonical/lxd/shared/api"
+
+	"github.com/google/uuid"
+)
+
+type BookmarkEntry struct {
+	Name string
+}
+
+// chromeTimestamp returns microseconds since January 1, 1601 (Chrome's epoch)
+func chromeTimestamp() string {
+	epoch := time.Date(1601, 1, 1, 0, 0, 0, 0, time.UTC)
+	return fmt.Sprintf("%d", time.Since(epoch).Microseconds())
+}
+
+func AnswersToBookmarks(answers *structs.AnswerResponse) []BookmarkEntry {
+	entries := make([]BookmarkEntry, 0, len(answers.Answers))
+	for _, a := range answers.Answers {
+		entries = append(entries, BookmarkEntry{
+			Name: fmt.Sprintf("%d. %s", a.Number, a.Answer),
+		})
+	}
+	return entries
+}
+
+func execWait(containerName string, cmd []string) error {
+	op, err := containers.Client.ExecInstance(containerName, api.InstanceExecPost{
+		Command:     cmd,
+		WaitForWS:   true,
+		Interactive: false,
+	}, nil)
+	if err != nil {
+		return fmt.Errorf("exec %v: %w", cmd, err)
+	}
+	return op.Wait()
+}
+
+func UpdateBookmarks(containerName, folderName string, entries []BookmarkEntry) error {
+	const bookmarksPath = "/root/.config/google-chrome/Default/Bookmarks"
+
+	// Stop Chrome before editing bookmarks
+	if err := execWait(containerName, []string{"/root/start.sh", "stop"}); err != nil {
+		return fmt.Errorf("stop chrome: %w", err)
+	}
+
+	reader, _, err := containers.Client.GetInstanceFile(containerName, bookmarksPath)
+	if err != nil {
+		return fmt.Errorf("read bookmarks file: %w", err)
+	}
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return fmt.Errorf("read bookmarks data: %w", err)
+	}
+
+	var bookmarks map[string]interface{}
+	if err := json.Unmarshal(data, &bookmarks); err != nil {
+		return fmt.Errorf("parse bookmarks: %w", err)
+	}
+
+	roots, ok := bookmarks["roots"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid bookmarks structure: missing roots")
+	}
+
+	bar, ok := roots["bookmark_bar"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid bookmarks structure: missing bookmark_bar")
+	}
+
+	children, _ := bar["children"].([]interface{})
+
+	// Find or create the target folder
+	var folder map[string]interface{}
+	for _, child := range children {
+		c, ok := child.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if c["type"] == "folder" && c["name"] == folderName {
+			folder = c
+			break
+		}
+	}
+
+	if folder == nil {
+		folder = map[string]interface{}{
+			"children":   []interface{}{},
+			"date_added": chromeTimestamp(),
+			"guid":       uuid.New().String(),
+			"id":         fmt.Sprintf("%d", len(children)+1),
+			"name":       folderName,
+			"type":       "folder",
+		}
+		children = append(children, folder)
+		bar["children"] = children
+	}
+
+	// Build new bookmark entries as folders (not URLs)
+	newChildren := make([]interface{}, 0, len(entries))
+	for i, entry := range entries {
+		ts := chromeTimestamp()
+		newChildren = append(newChildren, map[string]interface{}{
+			"children":   []interface{}{},
+			"date_added": ts,
+			"guid":       uuid.New().String(),
+			"id":         fmt.Sprintf("%d", i+100),
+			"name":       entry.Name,
+			"type":       "folder",
+		})
+	}
+	folder["children"] = newChildren
+
+	output, err := json.MarshalIndent(bookmarks, "", "   ")
+	if err != nil {
+		return fmt.Errorf("marshal bookmarks: %w", err)
+	}
+
+	err = containers.Client.CreateInstanceFile(containerName, bookmarksPath, lxd.InstanceFileArgs{
+		Content: strings.NewReader(string(output)),
+		Type:    "file",
+	})
+	if err != nil {
+		return fmt.Errorf("write bookmarks file: %w", err)
+	}
+
+	return nil
+}
+
+func SyncChrome(containerName string) error {
+	// Start Chrome back up, then run sync
+	if err := execWait(containerName, []string{"/root/start.sh", "start"}); err != nil {
+		return fmt.Errorf("start chrome: %w", err)
+	}
+	if err := execWait(containerName, []string{"/root/start.sh", "sync"}); err != nil {
+		return fmt.Errorf("sync chrome: %w", err)
+	}
+	return nil
+}

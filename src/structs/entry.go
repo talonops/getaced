@@ -12,6 +12,7 @@ import (
 type OnboardingStep string
 
 const (
+	OnboardingStepDrive    OnboardingStep = "OnboardingStepDrive"
 	OnboardingStepChrome   OnboardingStep = "OnboardingStepChrome"
 	OnboardingStepComplete OnboardingStep = "complete"
 )
@@ -21,11 +22,22 @@ type User struct {
 	gorm.Model
 	GoogleID           string         `gorm:"uniqueIndex" json:"google_id"`
 	Email              string         `gorm:"uniqueIndex" json:"email"`
-	OnboardingStep     OnboardingStep `json:"onboarding_step" gorm:"default:OnboardingStepChrome"`
+	OnboardingStep     OnboardingStep `json:"onboarding_step" gorm:"default:OnboardingStepDrive"`
 	CreemCustomerID    string         `json:"creem_customer_id,omitempty"`
 	SubscriptionID     string         `json:"subscription_id,omitempty"`
 	SubscriptionStatus string         `json:"subscription_status,omitempty"`
 	SubscriptionPaidAt *time.Time     `json:"subscription_paid_at,omitempty"`
+
+	// Drive integration
+	DriveRefreshToken  string `gorm:"type:text" json:"-"`
+	WatchFolderID      string `json:"watch_folder_id,omitempty"`
+	BookmarkFolderName string `gorm:"default:school work" json:"bookmark_folder_name,omitempty"`
+	CustomPrompt       string `gorm:"type:text" json:"custom_prompt,omitempty"`
+
+	// Payment enforcement
+	UsageCount   int        `json:"usage_count" gorm:"default:0"`
+	UsageResetAt *time.Time `json:"usage_reset_at,omitempty"`
+	TrialEndsAt  *time.Time `json:"trial_ends_at,omitempty"`
 }
 
 // GoogleResponse is the response from Google's userinfo API
@@ -61,6 +73,26 @@ type SetupSession struct {
 	Container string
 	IPSuffix  int
 	CreatedAt time.Time
+	ExpiresAt time.Time
+}
+
+// ProcessedFile tracks Drive files already processed to avoid reprocessing
+type ProcessedFile struct {
+	gorm.Model
+	UserID   uint   `gorm:"index"`
+	FileID   string `gorm:"index"`
+	FileName string
+}
+
+// AnswerResult is a single extracted answer from GPT
+type AnswerResult struct {
+	Number int    `json:"number"`
+	Answer string `json:"answer"`
+}
+
+// AnswerResponse is the full GPT response with all answers
+type AnswerResponse struct {
+	Answers []AnswerResult `json:"answers"`
 }
 
 // IPPool is used to keep track of used ip suffixes (101-254)

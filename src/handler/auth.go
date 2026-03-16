@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"time"
+
 	"getaced.io/src/auth"
+	"getaced.io/src/config"
 	"getaced.io/src/database"
 	"getaced.io/src/middleware"
 	"getaced.io/src/structs"
@@ -34,9 +37,16 @@ func GoogleCallback(c fiber.Ctx) error {
 	var user structs.User
 	result := database.DB.Where("google_id = ?", userInfo.ID).First(&user)
 	if result.Error != nil {
+		now := time.Now()
+		trialEnds := now.Add(7 * 24 * time.Hour)
+		usageReset := now.Add(30 * 24 * time.Hour)
+
 		user = structs.User{
-			GoogleID: userInfo.ID,
-			Email:    userInfo.Email,
+			GoogleID:           userInfo.ID,
+			Email:              userInfo.Email,
+			BookmarkFolderName: "school work",
+			TrialEndsAt:        &trialEnds,
+			UsageResetAt:       &usageReset,
 		}
 		if err := database.DB.Create(&user).Error; err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to create user"})
@@ -51,5 +61,10 @@ func GoogleCallback(c fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to generate token"})
 	}
 
-	return c.JSON(fiber.Map{"token": jwtToken})
+	frontendURL := config.Config("FRONTEND_URL")
+	if frontendURL == "" {
+		return c.JSON(fiber.Map{"token": jwtToken})
+	}
+
+	return c.Redirect().To(frontendURL + "/auth/callback?token=" + jwtToken)
 }

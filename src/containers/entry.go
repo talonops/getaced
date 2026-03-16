@@ -142,14 +142,31 @@ func NewSession(userID uint) (string, error) {
 		return "", fmt.Errorf("failed to exec into container for setup mode: %w", err)
 	}
 
+	now := time.Now()
 	Sessions.Lock()
 	Sessions.m[token] = &structs.SetupSession{
 		UserID:    userID,
 		Container: containerName,
 		IPSuffix:  IPSuffix,
-		CreatedAt: time.Now(),
+		CreatedAt: now,
+		ExpiresAt: now.Add(5 * time.Minute),
 	}
 	Sessions.Unlock()
 
 	return token, nil
+}
+
+// CleanupExpiredSessions removes VNC sessions that have expired.
+// The LXD container is NOT deleted - only the VNC access is revoked.
+func CleanupExpiredSessions() {
+	Sessions.Lock()
+	defer Sessions.Unlock()
+
+	now := time.Now()
+	for token, session := range Sessions.m {
+		if now.After(session.ExpiresAt) {
+			log.Printf("session expired for user %d (container %s), revoking VNC access", session.UserID, session.Container)
+			delete(Sessions.m, token)
+		}
+	}
 }

@@ -19,7 +19,7 @@ func Init(dbPath string) error {
 		return fmt.Errorf("open database: %w", err)
 	}
 
-	if err := DB.AutoMigrate(&structs.User{}); err != nil {
+	if err := DB.AutoMigrate(&structs.User{}, &structs.ProcessedFile{}); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)
 	}
 

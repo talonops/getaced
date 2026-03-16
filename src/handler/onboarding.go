@@ -37,3 +37,24 @@ func CreateSetupSession(c fiber.Ctx) error {
 		"session_url": "https://api.getaced.io/v1/s/" + token,
 	})
 }
+
+func CompleteOnboarding(c fiber.Ctx) error {
+	userID := c.Locals("user_id").(uint)
+
+	var user structs.User
+	if err := database.DB.First(&user, userID).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "user not found"})
+	}
+
+	if user.OnboardingStep == structs.OnboardingStepComplete {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "onboarding already complete"})
+	}
+
+	if user.OnboardingStep != structs.OnboardingStepChrome {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "complete previous steps first"})
+	}
+
+	database.DB.Model(&user).Update("onboarding_step", structs.OnboardingStepComplete)
+
+	return c.JSON(fiber.Map{"onboarding_step": "complete"})
+}
