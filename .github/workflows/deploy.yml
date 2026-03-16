@@ -15,6 +15,7 @@ jobs:
           username: talon
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            export PATH=$PATH:/usr/local/go/bin
             cd /home/talon/getaced
             git pull origin main
             CGO_ENABLED=1 go build -o getaced ./src/...
