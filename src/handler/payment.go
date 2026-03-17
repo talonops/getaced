@@ -57,96 +57,116 @@ func CreemWebhook(c fiber.Ctx) error {
 	obj := event.Object
 	requestID, _ := obj["request_id"].(string)
 
-	// Extract customer ID — can be nested under "customer" object or flat "customer_id"
+	// Extract customer ID from nested customer object
 	var customerID string
 	if customer, ok := obj["customer"].(map[string]interface{}); ok {
 		customerID, _ = customer["id"].(string)
 	}
-	if customerID == "" {
-		customerID, _ = obj["customer_id"].(string)
-	}
-	if customerID == "" {
-		customerID, _ = obj["customer"].(string)
-	}
 
-	// Extract subscription ID — can be nested under "subscription" object or flat "id"
+	// Extract subscription ID — nested object on checkout, or the object itself on subscription events
 	var subscriptionID string
 	if sub, ok := obj["subscription"].(map[string]interface{}); ok {
 		subscriptionID, _ = sub["id"].(string)
-	}
-	if subscriptionID == "" {
+	} else if objType, _ := obj["object"].(string); objType == "subscription" {
 		subscriptionID, _ = obj["id"].(string)
 	}
 
-	log.Printf("creem webhook: event=%s customer=%s subscription=%s request_id=%s", event.EventType, customerID, subscriptionID, requestID)
+	log.Printf("creem webhook: event=%s customer=%s subscription=%s request_id=%s event_id=%s", event.EventType, customerID, subscriptionID, requestID, event.ID)
 
 	if customerID == "" && requestID == "" {
 		return c.SendStatus(fiber.StatusOK)
 	}
 
-	// Idempotency check: skip if already processed
-	eventKey := event.EventType + ":" + subscriptionID
+	// Idempotency check using Creem's unique event ID
+	if event.ID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing event id"})
+	}
 	var existing structs.ProcessedWebhookEvent
-	if err := database.DB.Where("event_id = ?", eventKey).First(&existing).Error; err == nil {
+	if err := database.DB.Where("event_id = ?", event.ID).First(&existing).Error; err == nil {
 		return c.SendStatus(fiber.StatusOK) // already processed
 	}
 
 	// Try to find user by creem_customer_id first, then by request_id
 	var user structs.User
-	var err error
+	found := false
 	if customerID != "" {
-		err = database.DB.Where("creem_customer_id = ?", customerID).First(&user).Error
+		if err := database.DB.Where("creem_customer_id = ?", customerID).First(&user).Error; err == nil {
+			found = true
+		}
 	}
-	if err != nil && requestID != "" {
-		err = database.DB.Where("id = ?", requestID).First(&user).Error
+	if !found && requestID != "" {
+		if err := database.DB.Where("id = ?", requestID).First(&user).Error; err == nil {
+			found = true
+		}
 	}
 
-	if err != nil {
+	if !found {
+		log.Printf("creem webhook: user not found for customer=%s request_id=%s", customerID, requestID)
 		return c.SendStatus(fiber.StatusOK)
 	}
+
+	// Track whether we need to clean up user resources after the transaction
+	var shouldCleanup bool
 
 	// Process in a transaction for atomicity
 	txErr := database.DB.Transaction(func(tx *gorm.DB) error {
 		switch event.EventType {
 		case "checkout.completed":
 			now := time.Now()
-			tx.Model(&user).Updates(map[string]interface{}{
+			if err := tx.Model(&user).Updates(map[string]interface{}{
 				"creem_customer_id":    customerID,
 				"subscription_id":      subscriptionID,
 				"subscription_status":  "active",
 				"subscription_paid_at": &now,
-			})
+			}).Error; err != nil {
+				return err
+			}
 		case "subscription.active", "subscription.paid":
 			now := time.Now()
-			tx.Model(&user).Updates(map[string]interface{}{
+			if err := tx.Model(&user).Updates(map[string]interface{}{
 				"subscription_status":  "active",
 				"subscription_paid_at": &now,
-			})
+			}).Error; err != nil {
+				return err
+			}
 		case "subscription.trialing":
-			tx.Model(&user).Update("subscription_status", "trialing")
+			if err := tx.Model(&user).Update("subscription_status", "trialing").Error; err != nil {
+				return err
+			}
 		case "subscription.canceled":
-			tx.Model(&user).Update("subscription_status", "canceled")
-			go func() {
-				worker.StopUserWatch(user)
-				containers.DeleteUserContainer(user.ID)
-			}()
+			if err := tx.Model(&user).Update("subscription_status", "canceled").Error; err != nil {
+				return err
+			}
+			shouldCleanup = true
 		case "subscription.past_due":
-			tx.Model(&user).Update("subscription_status", "past_due")
+			if err := tx.Model(&user).Update("subscription_status", "past_due").Error; err != nil {
+				return err
+			}
 		case "subscription.expired":
-			tx.Model(&user).Update("subscription_status", "expired")
-			go func() {
-				worker.StopUserWatch(user)
-				containers.DeleteUserContainer(user.ID)
-			}()
+			if err := tx.Model(&user).Update("subscription_status", "expired").Error; err != nil {
+				return err
+			}
+			shouldCleanup = true
 		}
 
 		// Record event as processed
-		tx.Create(&structs.ProcessedWebhookEvent{EventID: eventKey})
+		if err := tx.Create(&structs.ProcessedWebhookEvent{EventID: event.ID}).Error; err != nil {
+			return err
+		}
 		return nil
 	})
 
 	if txErr != nil {
 		log.Printf("creem webhook transaction error: %v", txErr)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to process webhook"})
+	}
+
+	// Only clean up resources after the transaction has committed successfully
+	if shouldCleanup {
+		go func() {
+			worker.StopUserWatch(user)
+			containers.DeleteUserContainer(user.ID)
+		}()
 	}
 
 	return c.SendStatus(fiber.StatusOK)
