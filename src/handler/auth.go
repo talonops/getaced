@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"crypto/rand"
+	"fmt"
+	"sync"
 	"time"
 
 	"getaced.io/src/auth"
@@ -12,15 +15,62 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
+// OAuth state tokens — prevents CSRF on Google login
+var googleOAuthStates = struct {
+	sync.Mutex
+	m map[string]time.Time // state → expiresAt
+}{m: make(map[string]time.Time)}
+
+// Auth codes — short-lived codes exchanged for JWTs (avoids JWT in URL)
+type authCodeEntry struct {
+	JWT       string
+	ExpiresAt time.Time
+}
+
+var authCodes = struct {
+	sync.Mutex
+	m map[string]authCodeEntry
+}{m: make(map[string]authCodeEntry)}
+
+func generateRandomHex(n int) (string, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", b), nil
+}
+
 func GoogleAuth(c fiber.Ctx) error {
-	url := auth.ConfigGoogle().AuthCodeURL("state")
+	state, err := generateRandomHex(32)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to generate state"})
+	}
+
+	googleOAuthStates.Lock()
+	googleOAuthStates.m[state] = time.Now().Add(config.OAuthStateExpiry)
+	googleOAuthStates.Unlock()
+
+	url := auth.ConfigGoogle().AuthCodeURL(state)
 	return c.Redirect().To(url)
 }
 
 func GoogleCallback(c fiber.Ctx) error {
 	code := c.Query("code")
+	state := c.Query("state")
 	if code == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing code parameter"})
+	}
+
+	// Validate and consume state token
+	googleOAuthStates.Lock()
+	expiresAt, ok := googleOAuthStates.m[state]
+	if ok {
+		delete(googleOAuthStates.m, state)
+	}
+	googleOAuthStates.Unlock()
+
+	if !ok || time.Now().After(expiresAt) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid or expired state"})
 	}
 
 	token, err := auth.ConfigGoogle().Exchange(c.RequestCtx(), code)
@@ -70,5 +120,62 @@ func GoogleCallback(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{"token": jwtToken})
 	}
 
-	return c.Redirect().To(frontendURL + "/auth/callback?token=" + jwtToken)
+	// Generate short-lived auth code instead of putting JWT in URL
+	authCode, err := generateRandomHex(32)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to generate auth code"})
+	}
+
+	authCodes.Lock()
+	authCodes.m[authCode] = authCodeEntry{
+		JWT:       jwtToken,
+		ExpiresAt: time.Now().Add(config.AuthCodeExpiry),
+	}
+	authCodes.Unlock()
+
+	return c.Redirect().To(frontendURL + "/auth/callback?code=" + authCode)
+}
+
+// ExchangeAuthCode exchanges a short-lived auth code for a JWT
+func ExchangeAuthCode(c fiber.Ctx) error {
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := c.Bind().JSON(&body); err != nil || body.Code == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "code required"})
+	}
+
+	authCodes.Lock()
+	entry, ok := authCodes.m[body.Code]
+	if ok {
+		delete(authCodes.m, body.Code)
+	}
+	authCodes.Unlock()
+
+	if !ok || time.Now().After(entry.ExpiresAt) {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid or expired code"})
+	}
+
+	return c.JSON(fiber.Map{"token": entry.JWT})
+}
+
+// CleanupExpiredGoogleStates removes expired OAuth states and auth codes
+func CleanupExpiredGoogleStates() {
+	now := time.Now()
+
+	googleOAuthStates.Lock()
+	for state, expiresAt := range googleOAuthStates.m {
+		if now.After(expiresAt) {
+			delete(googleOAuthStates.m, state)
+		}
+	}
+	googleOAuthStates.Unlock()
+
+	authCodes.Lock()
+	for code, entry := range authCodes.m {
+		if now.After(entry.ExpiresAt) {
+			delete(authCodes.m, code)
+		}
+	}
+	authCodes.Unlock()
 }

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"getaced.io/src/config"
 	"getaced.io/src/structs"
 
 	"golang.org/x/net/html"
@@ -33,11 +34,11 @@ type Client struct {
 
 func NewClient(apiKey, model string) *Client {
 	if model == "" {
-		model = "gpt-4o"
+		model = config.DefaultOpenAIModel
 	}
 	return &Client{
 		APIKey: apiKey,
-		HTTP:   &http.Client{},
+		HTTP:   &http.Client{Timeout: config.HTTPTimeoutOpenAI},
 		Model:  model,
 	}
 }

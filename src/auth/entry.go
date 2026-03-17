@@ -19,7 +19,7 @@ func ConfigGoogle() *oauth2.Config {
 		ClientID:     config.Config("GOOGLE_CLIENT_ID"),
 		ClientSecret: config.Config("GOOGLE_CLIENT_SECRET"),
 		RedirectURL:  config.Config("GOOGLE_REDIRECT_URL"),
-		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email"},
+		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
 		Endpoint:     google.Endpoint,
 	}
 }
@@ -38,7 +38,8 @@ func GetUserInfo(accessToken string) (*structs.GoogleResponse, error) {
 		},
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: config.HTTPTimeoutGoogle}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request userinfo: %w", err)
 	}

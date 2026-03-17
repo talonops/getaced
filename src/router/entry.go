@@ -1,6 +1,7 @@
 package router
 
 import (
+	"getaced.io/src/config"
 	"getaced.io/src/handler"
 	"getaced.io/src/middleware"
 
@@ -11,12 +12,18 @@ import (
 
 func Routes(app *fiber.App) {
 	v1 := app.Group("/v1", logger.New())
-	app.Get("/novnc/*", static.New("/home/talon/novnc-static"))
+
+	novncPath := config.Config("NOVNC_STATIC_PATH")
+	if novncPath == "" {
+		novncPath = config.DefaultNoVNCPath
+	}
+	app.Get("/novnc/*", static.New(novncPath))
 	app.Use("/docs", static.New("./docs"))
 
 	// Public auth routes
 	v1.Get("/auth/google", handler.GoogleAuth)
 	v1.Get("/auth/google/callback", handler.GoogleCallback)
+	v1.Post("/auth/exchange", handler.ExchangeAuthCode)
 
 	// Drive OAuth (payment required to initiate, callback is public)
 	v1.Get("/auth/google/drive", middleware.AuthRequired, middleware.PaymentRequired, handler.DriveAuth)

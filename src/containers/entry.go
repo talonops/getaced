@@ -190,7 +190,12 @@ func NewSession(userID uint) (string, error) {
 		time.Sleep(500 * time.Millisecond)
 	}
 	if !ready {
-		log.Printf("containers: VNC not ready after 15s for %s, returning URL anyway", containerName)
+		log.Printf("containers: VNC not ready after 15s for %s, stopping container", containerName)
+		stopOp, stopErr := Client.UpdateInstanceState(containerName, api.InstanceStatePut{Action: "stop", Force: true}, "")
+		if stopErr == nil {
+			stopOp.Wait()
+		}
+		return "", fmt.Errorf("VNC not ready after 15 seconds")
 	}
 
 	now := time.Now()

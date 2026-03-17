@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"getaced.io/src/config"
@@ -27,6 +28,15 @@ func CreateCheckout(c fiber.Ctx) error {
 	}
 	if err := c.Bind().JSON(&body); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
+
+	// Validate success_url against allowed frontend domain
+	frontendURL := config.Config("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = config.DefaultFrontendURL
+	}
+	if body.SuccessURL != "" && !strings.HasPrefix(body.SuccessURL, frontendURL) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid success_url"})
 	}
 
 	checkout, err := CreemClient.CreateCheckout(structs.CheckoutRequest{

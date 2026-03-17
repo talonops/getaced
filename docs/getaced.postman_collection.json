@@ -1,7 +1,7 @@
 {
 	"info": {
 		"name": "api.getaced.io",
-		"description": "Base URL: https://api.getaced.io/v1\n\nAll protected routes need: Authorization: Bearer <token>\n\nFlow: Sign in → Checkout (starts trial) → Link Drive → Chrome Setup → Complete Onboarding → Set Watch Folder → Drop files\n\nTrials handled by Creem. 30 uses/month. Supported files: PNG, HTML.",
+		"description": "Base URL: https://api.getaced.io/v1\n\nAll protected routes need: Authorization: Bearer <token>\n\nFlow: Sign in → Exchange Code → Checkout (starts trial) → Link Drive → Chrome Setup → Complete Onboarding → Set Watch Folder → Drop files\n\nTrials handled by Creem. 30 uses/month. Supported files: PNG, HTML.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -22,7 +22,8 @@
 	],
 	"item": [
 		{
-			"name": "Public",
+			"name": "Auth",
+			"description": "Two-step auth flow:\n1. Open Google Sign In URL in browser\n2. After redirect, grab the `code` from the URL and exchange it for a JWT via POST /auth/exchange",
 			"item": [
 				{
 					"name": "Health Check",
@@ -34,12 +35,26 @@
 					}
 				},
 				{
-					"name": "Google Sign In (open in browser)",
+					"name": "1. Google Sign In (open in browser)",
 					"request": {
 						"auth": { "type": "noauth" },
 						"method": "GET",
 						"url": { "raw": "{{base_url}}/auth/google", "host": ["{{base_url}}"], "path": ["auth", "google"] },
-						"description": "Redirects to Google consent screen. After login redirects to:\n{FRONTEND_URL}/auth/callback?token=<jwt>\n\nOpen in browser. Copy token from URL, set as jwt_token variable."
+						"description": "Redirects to Google consent screen. After login redirects to:\n{FRONTEND_URL}/auth/callback?code=<auth_code>\n\nOpen in browser. Copy the `code` from the redirect URL.\n\nThe code is single-use and expires in 30 seconds. Exchange it for a JWT using POST /auth/exchange."
+					}
+				},
+				{
+					"name": "2. Exchange Auth Code for JWT",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"code\": \"PASTE_AUTH_CODE_HERE\"\n}"
+						},
+						"url": { "raw": "{{base_url}}/auth/exchange", "host": ["{{base_url}}"], "path": ["auth", "exchange"] },
+						"description": "Exchanges a short-lived auth code for a JWT token.\n\nThe code comes from the Google Sign In redirect URL (?code=xxx). It is single-use and expires in 30 seconds.\n\nResponse:\n{\n  \"token\": \"eyJhbGciOiJIUzI1NiIs...\"\n}\n\nSet the token as the jwt_token collection variable."
 					}
 				}
 			]
@@ -58,7 +73,7 @@
 							"raw": "{\n  \"product_id\": \"{{monthly_product_id}}\",\n  \"success_url\": \"https://getaced.io/dashboard?payment=success\"\n}"
 						},
 						"url": { "raw": "{{base_url}}/checkout", "host": ["{{base_url}}"], "path": ["checkout"] },
-						"description": "Creates Creem checkout for monthly plan. Creem handles 1-week free trial.\n\nResponse: {\"checkout_url\": \"https://checkout.creem.io/...\"}\n\nRedirect user to checkout_url. After payment, Creem webhook updates subscription_status."
+						"description": "Creates Creem checkout for monthly plan. Creem handles 1-week free trial.\n\nsuccess_url must start with the configured FRONTEND_URL domain.\n\nResponse: {\"checkout_url\": \"https://checkout.creem.io/...\"}\n\nRedirect user to checkout_url. After payment, Creem webhook updates subscription_status."
 					}
 				},
 				{
@@ -93,7 +108,7 @@
 					"request": {
 						"method": "POST",
 						"url": { "raw": "{{base_url}}/onboarding/chrome", "host": ["{{base_url}}"], "path": ["onboarding", "chrome"] },
-						"description": "Creates Chrome container with VNC. User must be on step OnboardingStepChrome.\n\nRequires active subscription or trial (402 if not).\n\nResponse: {\"session_url\": \"https://api.getaced.io/v1/s/abc123\"}\n\nOpen session_url in browser/iframe. 5 min window. User signs into Google in Chrome.\n\nIf container already exists (retry), it deletes the old one and creates fresh."
+						"description": "Creates Chrome container with VNC. User must be on step OnboardingStepChrome.\n\nRequires active subscription or trial (402 if not).\n\nResponse: {\"session_url\": \"https://api.getaced.io/v1/s/abc123\"}\n\nOpen session_url in browser/iframe. 5 min window. User signs into Google in Chrome.\n\nReturns 500 if VNC fails to start within 15 seconds.\n\nIf container already exists (retry), it deletes the old one and creates fresh."
 					}
 				},
 				{
@@ -149,7 +164,7 @@
 							"raw": "{\n  \"folder_id\": \"PASTE_DRIVE_FOLDER_ID_HERE\"\n}"
 						},
 						"url": { "raw": "{{base_url}}/settings/watch-folder", "host": ["{{base_url}}"], "path": ["settings", "watch-folder"] },
-						"description": "Sets which Drive folder to monitor. Also registers Drive push notifications.\n\nfolder_id from: https://drive.google.com/drive/folders/<THIS_PART>\n\nValidates folder exists.\n\nResponse: {\"watch_folder_id\": \"...\"}\n\n400 if folder not found or Drive not connected."
+						"description": "Sets which Drive folder to monitor. Also registers Drive push notifications.\n\nfolder_id from: https://drive.google.com/drive/folders/<THIS_PART>\n\nFolder ID must be alphanumeric (with hyphens/underscores).\n\nValidates folder exists.\n\nResponse: {\"watch_folder_id\": \"...\"}\n\n400 if folder not found or Drive not connected."
 					}
 				},
 				{
@@ -162,7 +177,7 @@
 							"raw": "{\n  \"folder_name\": \"school work\"\n}"
 						},
 						"url": { "raw": "{{base_url}}/settings/bookmark-folder", "host": ["{{base_url}}"], "path": ["settings", "bookmark-folder"] },
-						"description": "Sets Chrome bookmark folder name where answers appear. Default: \"school work\".\n\nResponse: {\"bookmark_folder_name\": \"...\"}"
+						"description": "Sets Chrome bookmark folder name where answers appear. Default: \"school work\".\n\nMax 100 characters.\n\nResponse: {\"bookmark_folder_name\": \"...\"}"
 					}
 				},
 				{
@@ -175,7 +190,7 @@
 							"raw": "{\n  \"custom_prompt\": \"This is AP Chemistry, use proper notation\"\n}"
 						},
 						"url": { "raw": "{{base_url}}/settings/prompt", "host": ["{{base_url}}"], "path": ["settings", "prompt"] },
-						"description": "Appended to AI system prompt. Send empty string to clear.\n\nResponse: {\"custom_prompt\": \"...\"}"
+						"description": "Appended to AI system prompt. Send empty string to clear.\n\nMax 500 characters.\n\nResponse: {\"custom_prompt\": \"...\"}"
 					}
 				}
 			]
@@ -189,7 +204,7 @@
 					"request": {
 						"method": "GET",
 						"url": { "raw": "{{base_url}}/usage", "host": ["{{base_url}}"], "path": ["usage"] },
-						"description": "Response:\n{\n  \"usage_count\": 5,\n  \"usage_limit\": 30,\n  \"usage_reset_at\": \"2026-04-15T00:00:00Z\",\n  \"subscription_status\": \"active\",\n  \"is_trialing\": false,\n  \"is_subscription_active\": true,\n  \"is_active\": true\n}"
+						"description": "Usage stats with daily breakdown for last 30 days.\n\nResponse:\n{\n  \"usage_count\": 5,\n  \"usage_limit\": 30,\n  \"usage_reset_at\": \"2026-04-15T00:00:00Z\",\n  \"subscription_status\": \"active\",\n  \"is_trialing\": false,\n  \"is_subscription_active\": true,\n  \"is_active\": true,\n  \"daily_usage\": [\n    {\"date\": \"2026-02-16\", \"count\": 0},\n    {\"date\": \"2026-02-17\", \"count\": 3},\n    ...\n  ]\n}"
 					}
 				},
 				{
@@ -198,6 +213,43 @@
 						"method": "GET",
 						"url": { "raw": "{{base_url}}/activity", "host": ["{{base_url}}"], "path": ["activity"] },
 						"description": "Last 20 processed files with answers.\n\nResponse:\n{\n  \"activity\": [\n    {\n      \"file_name\": \"Screenshot.png\",\n      \"answer_count\": 5,\n      \"answers\": [{\"number\": 1, \"answer\": \"A\"}, ...],\n      \"processed_at\": \"2026-03-15T22:49:20Z\"\n    }\n  ]\n}"
+					}
+				}
+			]
+		},
+		{
+			"name": "Webhooks (server-to-server)",
+			"description": "These endpoints are called by external services, not by the frontend. Documented here for reference.",
+			"item": [
+				{
+					"name": "Creem Payment Webhook",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "creem-signature", "value": "HMAC_SHA256_SIGNATURE" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"evt_xxx\",\n  \"eventType\": \"checkout.completed\",\n  \"object\": { ... }\n}"
+						},
+						"url": { "raw": "{{base_url}}/webhooks/creem", "host": ["{{base_url}}"], "path": ["webhooks", "creem"] },
+						"description": "Called by Creem on payment events. Verified via HMAC-SHA256 signature.\n\nEvents handled:\n- checkout.completed — activates subscription\n- subscription.active / subscription.paid — marks active\n- subscription.trialing — marks trialing\n- subscription.canceled — marks canceled, stops Drive watch, deletes container\n- subscription.past_due — marks past_due\n- subscription.expired — marks expired, stops Drive watch, deletes container\n\nIdempotent: uses Creem event ID to prevent double-processing."
+					}
+				},
+				{
+					"name": "Drive Push Notification",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{ "key": "X-Goog-Channel-ID", "value": "channel-uuid" },
+							{ "key": "X-Goog-Resource-State", "value": "change" },
+							{ "key": "X-Goog-Channel-Token", "value": "DRIVE_WEBHOOK_TOKEN" }
+						],
+						"url": { "raw": "{{base_url}}/webhooks/drive", "host": ["{{base_url}}"], "path": ["webhooks", "drive"] },
+						"description": "Called by Google Drive when files change in a watched folder.\n\nValidated via channel token (timing-safe comparison).\n\nEnqueues user for debounced processing (2s delay to batch rapid changes)."
 					}
 				}
 			]

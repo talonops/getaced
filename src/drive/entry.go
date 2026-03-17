@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
 	"time"
 
 	"getaced.io/src/config"
@@ -54,7 +55,13 @@ func NewServiceFromRefreshToken(refreshToken string) (*drive.Service, error) {
 	return srv, nil
 }
 
+var validFolderID = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+
 func ListNewFiles(srv *drive.Service, folderID string, since time.Time) ([]DriveFile, error) {
+	if !validFolderID.MatchString(folderID) {
+		return nil, fmt.Errorf("invalid folder ID format")
+	}
+
 	sinceStr := since.Format(time.RFC3339)
 	query := fmt.Sprintf(
 		"'%s' in parents and (mimeType='image/png' or mimeType='text/html') and modifiedTime > '%s' and trashed=false",

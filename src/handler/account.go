@@ -36,52 +36,6 @@ func DeleteAccount(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "account deleted"})
 }
 
-func DisconnectDrive(c fiber.Ctx) error {
-	userID := c.Locals("user_id").(uint)
-
-	var user structs.User
-	if err := database.DB.First(&user, userID).Error; err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "user not found"})
-	}
-
-	// Stop Drive watch
-	worker.StopUserWatch(user)
-
-	database.DB.Model(&user).Updates(map[string]interface{}{
-		"drive_refresh_token":  "",
-		"watch_folder_id":      "",
-		"drive_page_token":     "",
-		"drive_channel_id":     "",
-		"drive_channel_expiry": nil,
-	})
-
-	return c.JSON(fiber.Map{"message": "drive disconnected"})
-}
-
-func ResetChrome(c fiber.Ctx) error {
-	userID := c.Locals("user_id").(uint)
-
-	var user structs.User
-	if err := database.DB.First(&user, userID).Error; err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "user not found"})
-	}
-
-	// Delete old container
-	containerName := fmt.Sprintf("getaced-%d", userID)
-	deleteContainer(containerName)
-
-	// Create new session
-	token, err := containers.NewSession(userID)
-	if err != nil {
-		log.Printf("failed to create Chrome session for user %d: %v", userID, err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
-	}
-
-	return c.JSON(fiber.Map{
-		"session_url": "https://api.getaced.io/v1/s/" + token,
-	})
-}
-
 func deleteContainer(name string) {
 	// Read IP config before stopping
 	var suffix int

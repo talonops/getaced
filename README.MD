@@ -56,6 +56,18 @@ SELECT * FROM processed_files ORDER BY created_at DESC LIMIT 10;
 ```bash
 # On VPS
 cd /root/getaced && git pull && go build -o getaced ./src/... && systemctl restart getaced
+
+# View logs
+sudo journalctl -u getaced -f
+
+# View last 100 lines
+sudo journalctl -u getaced -n 100
+
+# View logs since last boot
+sudo journalctl -u getaced -b
+
+# Check service status
+sudo systemctl status getaced
 ```
 
 ## Env

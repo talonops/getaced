@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 
 	"getaced.io/src/database"
 	"getaced.io/src/structs"
@@ -19,7 +20,9 @@ func GetActivity(c fiber.Ctx) error {
 	for _, f := range files {
 		var answers []structs.AnswerResult
 		if f.Answers != "" {
-			json.Unmarshal([]byte(f.Answers), &answers)
+			if err := json.Unmarshal([]byte(f.Answers), &answers); err != nil {
+				log.Printf("activity: failed to unmarshal answers for file %s: %v", f.FileName, err)
+			}
 		}
 
 		activity = append(activity, fiber.Map{

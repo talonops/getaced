@@ -3,6 +3,7 @@ package handler
 import (
 	"log"
 
+	"getaced.io/src/config"
 	"getaced.io/src/containers"
 	"getaced.io/src/database"
 	"getaced.io/src/structs"
@@ -30,11 +31,11 @@ func CreateSetupSession(c fiber.Ctx) error {
 
 	if err != nil {
 		log.Printf("failed to create Chrome session for user %d: %v", userID, err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to create session"})
 	}
 
 	return c.JSON(fiber.Map{
-		"session_url": "https://api.getaced.io/v1/s/" + token,
+		"session_url": config.Config("WEBHOOK_BASE_URL") + "/v1/s/" + token,
 	})
 }
 

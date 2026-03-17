@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"log"
 	"os"
 	"os/signal"
@@ -38,6 +39,15 @@ func validateConfig() {
 			log.Fatalf("required environment variable %s is not set", key)
 		}
 	}
+
+	// Validate encryption key format (must be 64 hex chars = 32 bytes for AES-256)
+	encKey := config.Config("DRIVE_TOKEN_ENCRYPT_KEY")
+	if len(encKey) != 64 {
+		log.Fatalf("DRIVE_TOKEN_ENCRYPT_KEY must be 64 hex characters (32 bytes), got %d", len(encKey))
+	}
+	if _, err := hex.DecodeString(encKey); err != nil {
+		log.Fatalf("DRIVE_TOKEN_ENCRYPT_KEY is not valid hex: %v", err)
+	}
 }
 
 func main() {
@@ -68,6 +78,7 @@ func main() {
 		config.Config("OPENAI_MODEL"),
 	)
 	worker.RegisterCleanupHook(handler.CleanupExpiredOAuthStates)
+	worker.RegisterCleanupHook(handler.CleanupExpiredGoogleStates)
 	worker.Start(openaiClient)
 
 	app := fiber.New()

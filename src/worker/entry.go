@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	driveapi "google.golang.org/api/drive/v3"
+	"gorm.io/gorm"
 )
 
 var (
@@ -306,7 +307,7 @@ func processUser(user structs.User) error {
 		// Clear any previous failure record
 		database.DB.Where("user_id = ? AND file_id = ?", user.ID, file.ID).Delete(&structs.FailedFile{})
 
-		database.DB.Model(&user).Update("usage_count", user.UsageCount+1)
+		database.DB.Model(&user).Update("usage_count", gorm.Expr("usage_count + 1"))
 		user.UsageCount++
 
 		log.Printf("worker: processed file %s for user %d (%d answers)", file.Name, user.ID, len(answers.Answers))

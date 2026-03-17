@@ -82,6 +82,9 @@ func UpdateBookmarkFolder(c fiber.Ctx) error {
 	if err := c.Bind().JSON(&body); err != nil || body.FolderName == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "folder_name required"})
 	}
+	if len(body.FolderName) > config.MaxBookmarkFolderNameLen {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "folder_name too long"})
+	}
 
 	database.DB.Model(&structs.User{}).Where("id = ?", userID).Update("bookmark_folder_name", body.FolderName)
 
@@ -96,6 +99,9 @@ func UpdatePrompt(c fiber.Ctx) error {
 	}
 	if err := c.Bind().JSON(&body); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
+	if len(body.CustomPrompt) > config.MaxCustomPromptLen {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "custom_prompt too long"})
 	}
 
 	database.DB.Model(&structs.User{}).Where("id = ?", userID).Update("custom_prompt", body.CustomPrompt)

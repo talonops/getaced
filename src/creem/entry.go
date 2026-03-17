@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	"getaced.io/src/config"
 	"getaced.io/src/structs"
 )
 
@@ -20,7 +21,7 @@ func NewClient(baseURL, apiKey string) *Client {
 	return &Client{
 		BaseURL: baseURL,
 		APIKey:  apiKey,
-		HTTP:    &http.Client{},
+		HTTP:    &http.Client{Timeout: config.HTTPTimeoutCreem},
 	}
 }
 

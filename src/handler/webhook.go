@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"crypto/subtle"
+
 	"getaced.io/src/config"
 	"getaced.io/src/database"
 	"getaced.io/src/structs"
@@ -20,7 +22,7 @@ func DriveWebhook(c fiber.Ctx) error {
 
 	// Validate channel token matches our webhook secret
 	expectedToken := config.Config("DRIVE_WEBHOOK_TOKEN")
-	if expectedToken != "" && channelToken != expectedToken {
+	if expectedToken != "" && subtle.ConstantTimeCompare([]byte(channelToken), []byte(expectedToken)) != 1 {
 		return c.SendStatus(fiber.StatusUnauthorized)
 	}
 
