@@ -15,7 +15,7 @@ info:
     Trials handled by Creem. 30 uses/month. Supported files: PNG, HTML.
   version: 1.0.0
 servers:
-  - url: http://{{base_url}}
+  - url: https://api.getaced.io/v1
 components:
   securitySchemes:
     noauthAuth:
