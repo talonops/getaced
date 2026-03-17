@@ -232,3 +232,29 @@ func CleanupExpiredSessions() {
 		log.Printf("containers: released IP suffix %d from expired session (user %d)", session.IPSuffix, session.UserID)
 	}
 }
+
+// DeleteUserContainer stops and deletes a user's container
+func DeleteUserContainer(userID uint) {
+	containerName := fmt.Sprintf("getaced-%d", userID)
+
+	if _, _, err := Client.GetInstance(containerName); err != nil {
+		return // container doesn't exist
+	}
+
+	stopOp, err := Client.UpdateInstanceState(containerName, api.InstanceStatePut{Action: "stop", Force: true}, "")
+	if err == nil {
+		stopOp.Wait()
+	}
+
+	delOp, err := Client.DeleteInstance(containerName, false)
+	if err != nil {
+		log.Printf("containers: failed to delete container %s: %v", containerName, err)
+		return
+	}
+	if err := delOp.Wait(); err != nil {
+		log.Printf("containers: error waiting for deletion of %s: %v", containerName, err)
+		return
+	}
+
+	log.Printf("containers: deleted container %s (subscription ended)", containerName)
+}

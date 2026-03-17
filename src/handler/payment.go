@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"getaced.io/src/config"
+	"getaced.io/src/containers"
 	"getaced.io/src/creem"
 	"getaced.io/src/database"
 	"getaced.io/src/structs"
@@ -43,8 +44,6 @@ func CreateCheckout(c fiber.Ctx) error {
 func CreemWebhook(c fiber.Ctx) error {
 	signature := c.Get("creem-signature")
 	body := c.Body()
-
-	log.Printf("creem webhook raw body: %s", string(body))
 
 	if !creem.VerifySignature(body, signature, config.Config("CREEM_WEBHOOK_SECRET")) {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid signature"})
@@ -127,12 +126,18 @@ func CreemWebhook(c fiber.Ctx) error {
 			tx.Model(&user).Update("subscription_status", "trialing")
 		case "subscription.canceled":
 			tx.Model(&user).Update("subscription_status", "canceled")
-			go worker.StopUserWatch(user)
+			go func() {
+				worker.StopUserWatch(user)
+				containers.DeleteUserContainer(user.ID)
+			}()
 		case "subscription.past_due":
 			tx.Model(&user).Update("subscription_status", "past_due")
 		case "subscription.expired":
 			tx.Model(&user).Update("subscription_status", "expired")
-			go worker.StopUserWatch(user)
+			go func() {
+				worker.StopUserWatch(user)
+				containers.DeleteUserContainer(user.ID)
+			}()
 		}
 
 		// Record event as processed
