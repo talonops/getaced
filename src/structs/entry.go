@@ -73,7 +73,7 @@ type CheckoutResponse struct {
 
 // WebhookEvent is a Creem webhook payload
 type WebhookEvent struct {
-	EventType string                 `json:"event_type"`
+	EventType string                 `json:"eventType"`
 	Object    map[string]interface{} `json:"object"`
 }
 

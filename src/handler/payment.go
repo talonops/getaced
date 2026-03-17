@@ -44,6 +44,8 @@ func CreemWebhook(c fiber.Ctx) error {
 	signature := c.Get("creem-signature")
 	body := c.Body()
 
+	log.Printf("creem webhook raw body: %s", string(body))
+
 	if !creem.VerifySignature(body, signature, config.Config("CREEM_WEBHOOK_SECRET")) {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "invalid signature"})
 	}
