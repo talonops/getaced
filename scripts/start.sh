@@ -12,13 +12,13 @@ if [ "$MODE" = "setup" ]; then
     export DISPLAY=:1
     x11vnc -display :1 -forever -nopw &
     websockify --web /usr/share/novnc 6080 localhost:5900 &
-    google-chrome --no-sandbox --disable-gpu --no-first-run "https://accounts.google.com" &
+    google-chrome --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run "https://accounts.google.com" &
     wait
 elif [ "$MODE" = "sync" ]; then
     Xvfb :1 -screen 0 1280x720x24 &
     sleep 2
     export DISPLAY=:1
-    google-chrome --no-sandbox --disable-gpu --no-first-run &
+    google-chrome --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run &
     sleep 10
     pkill chrome
     pkill Xvfb
