@@ -55,20 +55,10 @@ func Init() error {
 			continue
 		}
 		if inst.StatusCode == api.Running {
-			content, _, err := Client.GetInstanceFile(inst.Name, "/etc/getaced.conf")
-			if err != nil {
-				continue
-			}
-			buf := make([]byte, 256)
-			n, err := content.Read(buf)
-			if err != nil || n == 0 {
-				continue
-			}
-			var suffix int
-			fmt.Sscanf(string(buf[:n]), "IP_SUFFIX=%d", &suffix)
-			if suffix >= 101 && suffix <= 254 {
-				IPPool.MarkUsed(suffix)
-				log.Printf("recovered IP suffix %d from %s", suffix, inst.Name)
+			log.Printf("stopping orphaned container %s", inst.Name)
+			op, err := Client.UpdateInstanceState(inst.Name, api.InstanceStatePut{Action: "stop", Force: true}, "")
+			if err == nil {
+				op.Wait()
 			}
 		}
 	}
