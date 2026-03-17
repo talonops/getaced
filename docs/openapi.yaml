@@ -143,9 +143,13 @@ paths:
     post:
       tags:
         - Payment (Step 1 after Sign In)
-      summary: Checkout (Yearly)
+      summary: Create Checkout
       description: |-
-        Creates Creem checkout for yearly plan.
+        Creates a Creem checkout session for monthly or yearly plan. Pass the appropriate product_id.
+
+        success_url must start with the configured frontend domain.
+
+        Creem handles the 1-week free trial — user enters payment info but isn't charged for 7 days.
 
         Response: {"checkout_url": "https://checkout.creem.io/..."}
       requestBody:
