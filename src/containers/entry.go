@@ -183,6 +183,26 @@ func NewSession(userID uint) (string, error) {
 		return "", fmt.Errorf("failed to exec into container for setup mode: %w", err)
 	}
 
+	// Wait for VNC to be ready (websockify on port 6080)
+	ready := false
+	for i := 0; i < 30; i++ { // up to 15 seconds
+		op, err := Client.ExecInstance(containerName, api.InstanceExecPost{
+			Command:     []string{"sh", "-c", "ss -tlnp | grep -q 6080"},
+			WaitForWS:   true,
+			Interactive: false,
+		}, nil)
+		if err == nil {
+			if err := op.Wait(); err == nil {
+				ready = true
+				break
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	if !ready {
+		log.Printf("containers: VNC not ready after 15s for %s, returning URL anyway", containerName)
+	}
+
 	now := time.Now()
 	Sessions.Lock()
 	Sessions.m[token] = &structs.SetupSession{
