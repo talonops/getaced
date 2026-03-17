@@ -5,7 +5,6 @@ MODE=${1:-setup}
 
 ip addr add 10.246.29.${IP_SUFFIX}/24 dev eth0 2>/dev/null
 ip route add default via 10.246.29.1 2>/dev/null
-echo "nameserver 8.8.8.8" > /etc/resolv.conf
 
 if [ "$MODE" = "setup" ]; then
     Xvfb :1 -screen 0 1280x720x24 &
