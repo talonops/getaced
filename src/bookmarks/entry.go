@@ -50,6 +50,13 @@ func execWait(containerName string, cmd []string) error {
 }
 
 func stopContainer(name string) error {
+	inst, _, err := containers.Client.GetInstance(name)
+	if err != nil {
+		return fmt.Errorf("get instance state: %w", err)
+	}
+	if inst.StatusCode != api.Running {
+		return nil // already stopped
+	}
 	op, err := containers.Client.UpdateInstanceState(name, api.InstanceStatePut{Action: "stop", Force: true}, "")
 	if err != nil {
 		return fmt.Errorf("stop container: %w", err)
