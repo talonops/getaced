@@ -85,14 +85,15 @@ paths:
     get:
       tags:
         - Auth
-      summary: 1. Google Sign In (open in browser)
+      summary: 1. Get Google Sign In URL
       description: >-
-        Redirects to Google consent screen. After login redirects to:
+        Returns Google OAuth URL. Open it in the browser to start sign-in.
 
+        Response: {"url": "https://accounts.google.com/..."}
+
+
+        After login, Google redirects to:
         {FRONTEND_URL}/auth/callback?code=<auth_code>
-
-
-        Open in browser. Copy the `code` from the redirect URL.
 
 
         The code is single-use and expires in 30 seconds. Exchange it for a JWT

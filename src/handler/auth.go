@@ -51,7 +51,7 @@ func GoogleAuth(c fiber.Ctx) error {
 	googleOAuthStates.Unlock()
 
 	url := auth.ConfigGoogle().AuthCodeURL(state)
-	return c.Redirect().To(url)
+	return c.JSON(fiber.Map{"url": url})
 }
 
 func GoogleCallback(c fiber.Ctx) error {
