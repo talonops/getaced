@@ -8,7 +8,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 )
 
-func ChromeSession(c fiber.Ctx) error {
+func BrowserSession(c fiber.Ctx) error {
 	token := c.Params("token")
 	session := containers.GetSession(token)
 	if session == nil {
@@ -18,7 +18,7 @@ func ChromeSession(c fiber.Ctx) error {
 	html := fmt.Sprintf(`<!DOCTYPE html>
 <html>
 <head>
-<title>GetAced - Chrome Setup</title>
+<title>GetAced - Browser Setup</title>
 <style>
     html,body{margin:0;padding:0;width:100%%;height:100%%;overflow:hidden;background:#000}
     #vnc{width:100%%;height:100%%}

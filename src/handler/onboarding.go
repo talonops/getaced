@@ -33,7 +33,7 @@ func CreateSetupSession(c fiber.Ctx) error {
 	token, err := containers.NewSession(userID)
 
 	if err != nil {
-		log.Printf("failed to create Chrome session for user %d: %v", userID, err)
+		log.Printf("failed to create browser session for user %d: %v", userID, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to create session"})
 	}
 

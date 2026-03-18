@@ -234,7 +234,7 @@ func CleanupExpiredSessions() {
 	for _, session := range expired {
 		log.Printf("session expired for user %d (container %s), stopping container", session.UserID, session.Container)
 
-		// Stop the container (kills Chrome, VNC, everything)
+		// Stop the container (kills VNC session)
 		op, err := Client.UpdateInstanceState(session.Container, api.InstanceStatePut{Action: "stop", Force: true}, "")
 		if err != nil {
 			log.Printf("containers: failed to stop expired session container %s: %v", session.Container, err)

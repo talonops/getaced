@@ -3,13 +3,12 @@ package handler
 import (
 	"time"
 
+	"getaced.io/src/config"
 	"getaced.io/src/database"
 	"getaced.io/src/structs"
 
 	"github.com/gofiber/fiber/v3"
 )
-
-const UsageLimit = 30
 
 func GetUsage(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uint)
@@ -49,7 +48,7 @@ func GetUsage(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"usage_count":            user.UsageCount,
-		"usage_limit":            UsageLimit,
+		"usage_limit":            config.UsageLimit,
 		"usage_reset_at":         user.UsageResetAt,
 		"subscription_status":    user.SubscriptionStatus,
 		"is_trialing":            isTrialing,

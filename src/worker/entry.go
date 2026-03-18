@@ -154,43 +154,6 @@ func processPendingUsers(ctx context.Context) {
 	pwg.Wait()
 }
 
-func processAllUsers(ctx context.Context) {
-	var users []structs.User
-	database.DB.Where(
-		"drive_refresh_token != '' AND watch_folder_id != '' AND usage_count < ? AND "+
-			"subscription_status IN ('active','trialing')",
-		30,
-	).Find(&users)
-
-	if len(users) == 0 {
-		return
-	}
-
-	sem := make(chan struct{}, maxConcurrent)
-	var pwg sync.WaitGroup
-
-	for _, user := range users {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-
-		sem <- struct{}{}
-		pwg.Add(1)
-		go func(u structs.User) {
-			defer pwg.Done()
-			defer func() { <-sem }()
-
-			if err := processUser(u); err != nil {
-				log.Printf("worker: error processing user %d: %v", u.ID, err)
-			}
-		}(user)
-	}
-
-	pwg.Wait()
-}
-
 func processUser(user structs.User) error {
 	refreshToken, err := crypto.Decrypt(user.DriveRefreshToken, config.Config("DRIVE_TOKEN_ENCRYPT_KEY"))
 	if err != nil {
@@ -231,7 +194,7 @@ func processUser(user structs.User) error {
 	}
 
 	for _, file := range files {
-		if user.UsageCount >= 30 {
+		if user.UsageCount >= config.UsageLimit {
 			log.Printf("worker: user %d reached usage limit", user.ID)
 			break
 		}

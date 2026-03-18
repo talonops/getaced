@@ -84,7 +84,7 @@ type WebhookEvent struct {
 	Object    map[string]interface{} `json:"object"`
 }
 
-// SetupSession is used to store info while user is setting up chrome session
+// SetupSession is used to store info while user is setting up a browser session
 type SetupSession struct {
 	UserID    uint
 	Container string

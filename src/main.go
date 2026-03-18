@@ -32,6 +32,7 @@ func validateConfig() {
 		"CREEM_BASE_URL",
 		"OPENAI_API_KEY",
 		"DRIVE_TOKEN_ENCRYPT_KEY",
+		"DRIVE_WEBHOOK_TOKEN",
 		"WEBHOOK_BASE_URL",
 	}
 	for _, key := range required {

@@ -3,13 +3,12 @@ package middleware
 import (
 	"time"
 
+	"getaced.io/src/config"
 	"getaced.io/src/database"
 	"getaced.io/src/structs"
 
 	"github.com/gofiber/fiber/v3"
 )
-
-const UsageLimit = 30
 
 func PaymentRequired(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uint)
@@ -42,11 +41,11 @@ func PaymentRequired(c fiber.Ctx) error {
 	}
 
 	// Check usage limit
-	if user.UsageCount >= UsageLimit {
+	if user.UsageCount >= config.UsageLimit {
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"error":          "usage limit reached",
 			"usage_count":    user.UsageCount,
-			"usage_limit":    UsageLimit,
+			"usage_limit":    config.UsageLimit,
 			"usage_reset_at": user.UsageResetAt,
 		})
 	}

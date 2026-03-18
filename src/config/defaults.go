@@ -9,6 +9,7 @@ const (
 
 	MaxBookmarkFolderNameLen = 100
 	MaxCustomPromptLen       = 500
+	UsageLimit               = 30
 
 	AuthCodeExpiry  = 30 * time.Second
 	OAuthStateExpiry = 10 * time.Minute

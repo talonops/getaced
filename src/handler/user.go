@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"getaced.io/src/config"
 	"getaced.io/src/database"
 	"getaced.io/src/structs"
 
@@ -30,7 +31,7 @@ func GetMe(c fiber.Ctx) error {
 		"watch_folder_id":        user.WatchFolderID,
 		"bookmark_folder_name":   user.BookmarkFolderName,
 		"usage_count":            user.UsageCount,
-		"usage_limit":            30,
+		"usage_limit":            config.UsageLimit,
 		"is_trialing":            isTrialing,
 		"is_subscription_active": isSubActive,
 		"is_active":              isTrialing || isSubActive,
