@@ -42,10 +42,12 @@ func Routes(app *fiber.App) {
 	// Protected routes
 	v1.Get("/me", middleware.AuthRequired, handler.GetMe)
 	v1.Post("/checkout", middleware.AuthRequired, handler.CreateCheckout)
+	v1.Post("/billing", middleware.AuthRequired, handler.CustomerPortal)
 
 	// Onboarding (payment required)
 	v1.Post("/onboarding/chrome", middleware.AuthRequired, middleware.PaymentRequired, handler.CreateSetupSession)
 	v1.Post("/onboarding/complete", middleware.AuthRequired, middleware.PaymentRequired, handler.CompleteOnboarding)
+	v1.Post("/onboarding/watch-folder", middleware.AuthRequired, middleware.PaymentRequired, handler.SetOnboardingWatchFolder)
 
 	// Settings (payment required)
 	v1.Get("/settings", middleware.AuthRequired, middleware.PaymentRequired, handler.GetSettings)

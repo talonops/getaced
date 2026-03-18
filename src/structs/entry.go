@@ -12,9 +12,10 @@ import (
 type OnboardingStep string
 
 const (
-	OnboardingStepDrive    OnboardingStep = "OnboardingStepDrive"
-	OnboardingStepChrome   OnboardingStep = "OnboardingStepChrome"
-	OnboardingStepComplete OnboardingStep = "complete"
+	OnboardingStepDrive       OnboardingStep = "OnboardingStepDrive"
+	OnboardingStepChrome      OnboardingStep = "OnboardingStepChrome"
+	OnboardingStepWatchFolder OnboardingStep = "OnboardingStepWatchFolder"
+	OnboardingStepComplete    OnboardingStep = "complete"
 )
 
 // User is the main user model stored in SQLite
@@ -69,6 +70,11 @@ type CheckoutRequest struct {
 type CheckoutResponse struct {
 	ID          string `json:"id"`
 	CheckoutURL string `json:"checkout_url"`
+}
+
+// BillingPortalResponse is returned by Creem for customer portal access
+type BillingPortalResponse struct {
+	CustomerPortalLink string `json:"customer_portal_link"`
 }
 
 // WebhookEvent is a Creem webhook payload

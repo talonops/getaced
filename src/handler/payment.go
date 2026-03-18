@@ -51,6 +51,27 @@ func CreateCheckout(c fiber.Ctx) error {
 	return c.JSON(fiber.Map{"checkout_url": checkout.CheckoutURL})
 }
 
+func CustomerPortal(c fiber.Ctx) error {
+	userID := c.Locals("user_id").(uint)
+
+	var user structs.User
+	if err := database.DB.First(&user, userID).Error; err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "user not found"})
+	}
+
+	if user.CreemCustomerID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "no subscription found"})
+	}
+
+	portal, err := CreemClient.CreateBillingPortal(user.CreemCustomerID)
+	if err != nil {
+		log.Printf("failed to create billing portal for user %d: %v", userID, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to create billing portal"})
+	}
+
+	return c.JSON(fiber.Map{"portal_url": portal.CustomerPortalLink})
+}
+
 func CreemWebhook(c fiber.Ctx) error {
 	signature := c.Get("creem-signature")
 	body := c.Body()

@@ -60,3 +60,39 @@ func (c *Client) CreateCheckout(req structs.CheckoutRequest) (*structs.CheckoutR
 
 	return &checkout, nil
 }
+
+func (c *Client) CreateBillingPortal(customerID string) (*structs.BillingPortalResponse, error) {
+	body, err := json.Marshal(map[string]string{"customer_id": customerID})
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequest("POST", c.BaseURL+"/v1/customers/billing", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("x-api-key", c.APIKey)
+
+	resp, err := c.HTTP.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("do request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("creem API error (%d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var portal structs.BillingPortalResponse
+	if err := json.Unmarshal(respBody, &portal); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &portal, nil
+}

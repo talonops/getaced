@@ -9,7 +9,7 @@ info:
 
 
     Flow: Sign in → Exchange Code → Checkout (starts trial) → Link Drive →
-    Chrome Setup → Complete Onboarding → Set Watch Folder → Drop files
+    Chrome Setup → Set Watch Folder → Drop files
 
 
     Trials handled by Creem. 30 uses/month. Supported files: PNG, HTML.
@@ -35,26 +35,31 @@ tags:
 
       2. After redirect, grab the `code` from the URL and exchange it for a JWT
       via POST /auth/exchange
-  - name: Payment (Step 1 after Sign In)
+  - name: Payment
     description: >-
-      Payment is required BEFORE onboarding. Creem handles the 1-week free trial
-      — user enters payment info but isn't charged for 7 days.
-  - name: Onboarding (Step 2 — requires payment/trial)
+      Required before onboarding. Creem handles the 1-week free trial — user
+      enters payment info but isn't charged for 7 days.
+  - name: Billing
     description: >-
-      All onboarding endpoints require active subscription or trial (402 if
-      not).
+      Subscription management via Creem customer portal. Returns a magic link
+      that redirects users to manage subscriptions, payment methods, and billing
+      history. No active subscription required — works for canceled/expired users
+      too.
+  - name: Onboarding
+    description: >-
+      Requires active subscription or trial (402 if not).
 
 
-      Steps: 1. Link Drive → 2. Chrome Setup → 3. Complete
+      Steps: 1. Link Drive → 2. Chrome Setup → 3. Set Watch Folder
   - name: User
-  - name: Settings (requires payment/trial)
-    description: All require active subscription or trial (402 if not).
-  - name: Usage & Activity (requires payment/trial)
-    description: Require active subscription or trial (402 if not).
-  - name: Webhooks (server-to-server)
+  - name: Settings
+    description: Requires active subscription or trial (402 if not).
+  - name: Usage & Activity
+    description: Requires active subscription or trial (402 if not).
+  - name: Webhooks
     description: >-
-      These endpoints are called by external services, not by the frontend.
-      Documented here for reference.
+      Called by external services (Creem, Google Drive), not by the frontend.
+      Documented for reference.
 paths:
   /health:
     get:
@@ -142,7 +147,7 @@ paths:
   /checkout:
     post:
       tags:
-        - Payment (Step 1 after Sign In)
+        - Payment
       summary: Create Checkout
       description: |-
         Creates a Creem checkout session for monthly or yearly plan. Pass the appropriate product_id.
@@ -172,10 +177,30 @@ paths:
           description: Successful response
           content:
             application/json: {}
+  /billing:
+    post:
+      tags:
+        - Billing
+      summary: Customer Portal
+      description: |-
+        Returns a Creem customer portal magic link. The user can manage their subscription, update payment methods, and view billing history.
+
+        No active subscription required — users with canceled or expired subscriptions can still access the portal.
+
+        Requires a Creem customer ID (set after first checkout).
+
+        Response: {"portal_url": "https://creem.io/my-orders/login/xxx"}
+
+        400 if user has no subscription history.
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
   /auth/google/drive:
     get:
       tags:
-        - Onboarding (Step 2 — requires payment/trial)
+        - Onboarding
       summary: 1. Get Drive Auth URL
       description: >-
         Returns Google Drive OAuth URL. User must be on step
@@ -202,7 +227,7 @@ paths:
   /onboarding/chrome:
     post:
       tags:
-        - Onboarding (Step 2 — requires payment/trial)
+        - Onboarding
       summary: 2. Create Chrome Setup Session
       description: >-
         Creates Chrome container with VNC. User must be on step
@@ -234,16 +259,50 @@ paths:
   /onboarding/complete:
     post:
       tags:
-        - Onboarding (Step 2 — requires payment/trial)
-      summary: 3. Complete Onboarding
+        - Onboarding
+      summary: 3. Complete Chrome Setup
       description: |-
-        Marks onboarding done. Call after Chrome setup.
+        Advances onboarding from Chrome step to Watch Folder step. Call after Chrome setup session.
 
         Requires active subscription or trial (402 if not).
 
-        Response: {"onboarding_step": "complete"}
+        Response: {"onboarding_step": "OnboardingStepWatchFolder"}
       requestBody:
         content: {}
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /onboarding/watch-folder:
+    post:
+      tags:
+        - Onboarding
+      summary: 4. Set Watch Folder & Complete Onboarding
+      description: |-
+        Sets the Drive folder to monitor and completes onboarding. User must be on the WatchFolder step.
+
+        Requires active subscription or trial (402 if not).
+
+        folder_id from: https://drive.google.com/drive/folders/<THIS_PART>
+
+        Validates the folder exists and is accessible in Google Drive. Registers Drive push notifications.
+
+        Response: {"onboarding_step": "complete", "watch_folder_id": "..."}
+
+        400 if folder not found, Drive not connected, or wrong onboarding step.
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              type: string
+              example: '"{\n  \"folder_id\": \"PASTE_DRIVE_FOLDER_ID_HERE\"\n}"'
+      parameters:
+        - name: Content-Type
+          in: header
+          schema:
+            type: string
+          example: application/json
       responses:
         '200':
           description: Successful response
@@ -263,7 +322,7 @@ paths:
           "email": "student@gmail.com",
           "name": "John Doe",
           "avatar_url": "https://lh3.googleusercontent.com/...",
-          "onboarding_step": "complete" | "OnboardingStepDrive" | "OnboardingStepChrome",
+          "onboarding_step": "complete" | "OnboardingStepDrive" | "OnboardingStepChrome" | "OnboardingStepWatchFolder",
           "subscription_status": "trialing" | "active" | "canceled" | "past_due" | "expired" | "",
           "subscription_id": "sub_xxx",
           "has_drive_connected": true,
@@ -283,7 +342,8 @@ paths:
         1. If subscription_status is empty → show checkout
         2. If onboarding_step is OnboardingStepDrive → show Drive linking
         3. If onboarding_step is OnboardingStepChrome → show Chrome setup
-        4. If onboarding_step is complete → show dashboard
+        4. If onboarding_step is OnboardingStepWatchFolder → show watch folder picker
+        5. If onboarding_step is complete → show dashboard
       responses:
         '200':
           description: Successful response
@@ -308,7 +368,7 @@ paths:
   /settings:
     get:
       tags:
-        - Settings (requires payment/trial)
+        - Settings
       summary: Get Settings
       description: |-
         Response:
@@ -326,7 +386,7 @@ paths:
   /settings/watch-folder:
     put:
       tags:
-        - Settings (requires payment/trial)
+        - Settings
       summary: Set Watch Folder
       description: >-
         Sets which Drive folder to monitor. Also registers Drive push
@@ -366,7 +426,7 @@ paths:
   /settings/bookmark-folder:
     put:
       tags:
-        - Settings (requires payment/trial)
+        - Settings
       summary: Set Bookmark Folder
       description: >-
         Sets Chrome bookmark folder name where answers appear. Default: "school
@@ -397,7 +457,7 @@ paths:
   /settings/prompt:
     put:
       tags:
-        - Settings (requires payment/trial)
+        - Settings
       summary: Set Custom Prompt
       description: |-
         Appended to AI system prompt. Send empty string to clear.
@@ -427,7 +487,7 @@ paths:
   /usage:
     get:
       tags:
-        - Usage & Activity (requires payment/trial)
+        - Usage & Activity
       summary: Get Usage
       description: |-
         Usage stats with daily breakdown for last 30 days.
@@ -455,7 +515,7 @@ paths:
   /activity:
     get:
       tags:
-        - Usage & Activity (requires payment/trial)
+        - Usage & Activity
       summary: Get Activity
       description: |-
         Last 20 processed files with answers.
@@ -479,7 +539,7 @@ paths:
   /webhooks/creem:
     post:
       tags:
-        - Webhooks (server-to-server)
+        - Webhooks
       summary: Creem Payment Webhook
       description: >-
         Called by Creem on payment events. Verified via HMAC-SHA256 signature.
@@ -532,7 +592,7 @@ paths:
   /webhooks/drive:
     post:
       tags:
-        - Webhooks (server-to-server)
+        - Webhooks
       summary: Drive Push Notification
       description: >-
         Called by Google Drive when files change in a watched folder.
