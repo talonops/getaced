@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"getaced.io/src/analytics"
 	"getaced.io/src/config"
 
 	"github.com/gofiber/fiber/v3"
@@ -51,5 +52,6 @@ func AuthRequired(c fiber.Ctx) error {
 
 	c.Locals("user_id", claims.UserID)
 	c.Locals("email", claims.Email)
+	go analytics.TrackUserActive(claims.UserID)
 	return c.Next()
 }

@@ -129,6 +129,35 @@ type FailedFile struct {
 	Failures int `gorm:"default:0"`
 }
 
+// AnalyticsEvent is an append-only log of business events.
+type AnalyticsEvent struct {
+	ID           uint      `gorm:"primaryKey;autoIncrement"`
+	CreatedAt    time.Time `gorm:"index;autoCreateTime"`
+	UserID       uint      `gorm:"index"`
+	Event        string    `gorm:"index;not null"`
+	StepName     string    `gorm:"default:null"`
+	PlanType     string    `gorm:"default:null"`
+	Amount       int       `gorm:"default:0"`
+	TokensInput  int       `gorm:"default:0"`
+	TokensOutput int       `gorm:"default:0"`
+}
+
+// AnalyticsDailySnapshot stores one row per calendar day with aggregate metrics.
+type AnalyticsDailySnapshot struct {
+	ID             uint   `gorm:"primaryKey;autoIncrement"`
+	Date           string `gorm:"uniqueIndex;not null"`
+	TotalUsers     int
+	DAU            int
+	WAU            int
+	PayingUsers    int
+	TrialUsers     int
+	MRR            int
+	ChurnCount     int
+	FilesProcessed int
+	TokensInput    int
+	TokensOutput   int
+}
+
 // IPPool is used to keep track of used ip suffixes (101-254)
 type IPPool struct {
 	mu   sync.Mutex

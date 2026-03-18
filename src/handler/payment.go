@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"getaced.io/src/analytics"
 	"getaced.io/src/config"
 	"getaced.io/src/containers"
 	"getaced.io/src/creem"
@@ -190,6 +191,32 @@ func CreemWebhook(c fiber.Ctx) error {
 	if txErr != nil {
 		log.Printf("creem webhook transaction error: %v", txErr)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to process webhook"})
+	}
+
+	// Determine plan type from product info in the webhook payload
+	var productID string
+	if product, ok := obj["product"].(map[string]interface{}); ok {
+		productID, _ = product["id"].(string)
+	}
+	planType := "monthly"
+	amountCents := config.MonthlyPriceCents
+	if productID == config.QuarterlyProductID {
+		planType = "quarterly"
+		amountCents = config.QuarterlyPriceCents
+	}
+
+	// Fire-and-forget analytics after successful transaction
+	switch event.EventType {
+	case "checkout.completed":
+		analytics.Track("subscription_created", user.ID, analytics.WithPlan(planType))
+		analytics.Track("payment_received", user.ID, analytics.WithAmount(amountCents), analytics.WithPlan(planType))
+	case "subscription.trialing":
+		analytics.Track("trial_started", user.ID)
+	case "subscription.paid":
+		analytics.Track("subscription_renewed", user.ID, analytics.WithPlan(planType))
+		analytics.Track("payment_received", user.ID, analytics.WithAmount(amountCents), analytics.WithPlan(planType))
+	case "subscription.canceled":
+		analytics.Track("subscription_cancelled", user.ID)
 	}
 
 	// Only clean up resources after the transaction has committed successfully

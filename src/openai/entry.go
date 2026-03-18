@@ -64,6 +64,16 @@ type chatResponse struct {
 			Content string `json:"content"`
 		} `json:"message"`
 	} `json:"choices"`
+	Usage struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+	} `json:"usage"`
+}
+
+// TokenUsage holds token counts from an OpenAI API call.
+type TokenUsage struct {
+	PromptTokens     int
+	CompletionTokens int
 }
 
 func buildSystemPrompt(customPrompt string) string {
@@ -74,7 +84,7 @@ func buildSystemPrompt(customPrompt string) string {
 	return prompt
 }
 
-func (c *Client) doChat(messages []chatMessage) (*structs.AnswerResponse, error) {
+func (c *Client) doChat(messages []chatMessage) (*structs.AnswerResponse, *TokenUsage, error) {
 	reqBody := chatRequest{
 		Model:          c.Model,
 		Messages:       messages,
@@ -83,49 +93,54 @@ func (c *Client) doChat(messages []chatMessage) (*structs.AnswerResponse, error)
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+		return nil, nil, fmt.Errorf("marshal request: %w", err)
 	}
 
 	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.APIKey)
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("do request: %w", err)
+		return nil, nil, fmt.Errorf("do request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, nil, fmt.Errorf("read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("openai API error (%d): %s", resp.StatusCode, string(respBody))
+		return nil, nil, fmt.Errorf("openai API error (%d): %s", resp.StatusCode, string(respBody))
 	}
 
 	var chatResp chatResponse
 	if err := json.Unmarshal(respBody, &chatResp); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
+		return nil, nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 
 	if len(chatResp.Choices) == 0 {
-		return nil, fmt.Errorf("no choices in response")
+		return nil, nil, fmt.Errorf("no choices in response")
 	}
 
 	var answers structs.AnswerResponse
 	if err := json.Unmarshal([]byte(chatResp.Choices[0].Message.Content), &answers); err != nil {
-		return nil, fmt.Errorf("unmarshal answers: %w", err)
+		return nil, nil, fmt.Errorf("unmarshal answers: %w", err)
 	}
 
-	return &answers, nil
+	usage := &TokenUsage{
+		PromptTokens:     chatResp.Usage.PromptTokens,
+		CompletionTokens: chatResp.Usage.CompletionTokens,
+	}
+
+	return &answers, usage, nil
 }
 
-func (c *Client) ProcessText(text string, customPrompt string) (*structs.AnswerResponse, error) {
+func (c *Client) ProcessText(text string, customPrompt string) (*structs.AnswerResponse, *TokenUsage, error) {
 	messages := []chatMessage{
 		{Role: "system", Content: buildSystemPrompt(customPrompt)},
 		{Role: "user", Content: text},
@@ -133,7 +148,7 @@ func (c *Client) ProcessText(text string, customPrompt string) (*structs.AnswerR
 	return c.doChat(messages)
 }
 
-func (c *Client) ProcessImage(imageBytes []byte, customPrompt string) (*structs.AnswerResponse, error) {
+func (c *Client) ProcessImage(imageBytes []byte, customPrompt string) (*structs.AnswerResponse, *TokenUsage, error) {
 	b64 := base64.StdEncoding.EncodeToString(imageBytes)
 	imageURL := "data:image/png;base64," + b64
 

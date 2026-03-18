@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"getaced.io/src/analytics"
 	"getaced.io/src/bookmarks"
 	"getaced.io/src/config"
 	"getaced.io/src/containers"
@@ -91,6 +92,11 @@ func pollLoop(ctx context.Context) {
 	sessionTicker := time.NewTicker(30 * time.Second)
 	defer sessionTicker.Stop()
 
+	// 4. Analytics daily snapshot — hourly, also run on startup
+	snapshotTicker := time.NewTicker(1 * time.Hour)
+	defer snapshotTicker.Stop()
+	analytics.GenerateDailySnapshot()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -104,6 +110,8 @@ func pollLoop(ctx context.Context) {
 			for _, fn := range cleanupHooks {
 				fn()
 			}
+		case <-snapshotTicker.C:
+			analytics.GenerateDailySnapshot()
 		}
 	}
 }
@@ -223,13 +231,14 @@ func processUser(user structs.User) error {
 		}
 
 		var answers *structs.AnswerResponse
+		var tokenUsage *openaiPkg.TokenUsage
 
 		switch {
 		case mimeType == "text/html":
 			text := openaiPkg.StripHTML(data)
-			answers, err = openaiClient.ProcessText(text, user.CustomPrompt)
+			answers, tokenUsage, err = openaiClient.ProcessText(text, user.CustomPrompt)
 		case mimeType == "image/png":
-			answers, err = openaiClient.ProcessImage(data, user.CustomPrompt)
+			answers, tokenUsage, err = openaiClient.ProcessImage(data, user.CustomPrompt)
 		default:
 			log.Printf("worker: skipping unsupported file type %s for file %s", mimeType, file.Name)
 			continue
@@ -272,6 +281,12 @@ func processUser(user structs.User) error {
 
 		database.DB.Model(&user).Update("usage_count", gorm.Expr("usage_count + 1"))
 		user.UsageCount++
+
+		if tokenUsage != nil {
+			analytics.Track("file_processed", user.ID, analytics.WithTokens(tokenUsage.PromptTokens, tokenUsage.CompletionTokens))
+		} else {
+			analytics.Track("file_processed", user.ID)
+		}
 
 		log.Printf("worker: processed file %s for user %d (%d answers)", file.Name, user.ID, len(answers.Answers))
 	}
@@ -337,6 +352,7 @@ func recordFailure(userID uint, fileID, fileName string) {
 		// Increment existing
 		database.DB.Model(&failed).Update("failures", failed.Failures+1)
 	}
+	analytics.Track("file_failed", userID)
 }
 
 // RegisterUserWatch sets up Drive push notifications for a user

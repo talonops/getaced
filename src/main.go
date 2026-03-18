@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"getaced.io/src/analytics"
 	"getaced.io/src/config"
 	"getaced.io/src/containers"
 	"getaced.io/src/creem"
@@ -59,6 +60,8 @@ func main() {
 		log.Fatal("failed to init database:", err)
 	}
 
+	analytics.Start()
+
 	startScript, err := os.ReadFile("scripts/start.sh")
 	if err != nil {
 		log.Fatal("failed to read scripts/start.sh:", err)
@@ -109,6 +112,7 @@ func main() {
 	go func() {
 		<-quit
 		log.Println("shutting down...")
+		analytics.Stop()
 		worker.Stop()
 		app.Shutdown()
 		database.Close()
