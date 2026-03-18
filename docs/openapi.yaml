@@ -9,7 +9,7 @@ info:
 
 
     Flow: Sign in → Exchange Code → Checkout (starts trial) → Link Drive →
-    Chrome Setup → Set Watch Folder → Drop files
+    Browser Session → Set Watch Folder → Drop files
 
 
     Trials handled by Creem. 30 uses/month. Supported files: PNG, HTML.
@@ -50,7 +50,7 @@ tags:
       Requires active subscription or trial (402 if not).
 
 
-      Steps: 1. Link Drive → 2. Chrome Setup → 3. Set Watch Folder
+      Steps: 1. Link Drive → 2. Browser Session → 3. Complete Session → 4. Set Watch Folder
   - name: User
   - name: Settings
     description: Requires active subscription or trial (402 if not).
@@ -214,7 +214,7 @@ paths:
 
 
         Open URL in browser. After consent, redirects to
-        {FRONTEND_URL}/onboarding?step=chrome
+        {FRONTEND_URL}/onboarding?step=session
 
 
         Prevents duplicate Drive accounts — if this Drive is already linked to
@@ -224,14 +224,14 @@ paths:
           description: Successful response
           content:
             application/json: {}
-  /onboarding/chrome:
+  /onboarding/session:
     post:
       tags:
         - Onboarding
-      summary: 2. Create Chrome Setup Session
+      summary: 2. Create Browser Session
       description: >-
-        Creates Chrome container with VNC. User must be on step
-        OnboardingStepChrome.
+        Creates a remote browser container with VNC. User must be on step
+        OnboardingStepSession.
 
 
         Requires active subscription or trial (402 if not).
@@ -256,13 +256,13 @@ paths:
           description: Successful response
           content:
             application/json: {}
-  /onboarding/complete:
+  /onboarding/session/complete:
     post:
       tags:
         - Onboarding
-      summary: 3. Complete Chrome Setup
+      summary: 3. Complete Browser Session
       description: |-
-        Advances onboarding from Chrome step to Watch Folder step. Call after Chrome setup session.
+        Advances onboarding from Session step to Watch Folder step. Call after the user finishes the browser session.
 
         Requires active subscription or trial (402 if not).
 
@@ -322,7 +322,7 @@ paths:
           "email": "student@gmail.com",
           "name": "John Doe",
           "avatar_url": "https://lh3.googleusercontent.com/...",
-          "onboarding_step": "complete" | "OnboardingStepDrive" | "OnboardingStepChrome" | "OnboardingStepWatchFolder",
+          "onboarding_step": "complete" | "OnboardingStepDrive" | "OnboardingStepSession" | "OnboardingStepWatchFolder",
           "subscription_status": "trialing" | "active" | "canceled" | "past_due" | "expired" | "",
           "subscription_id": "sub_xxx",
           "has_drive_connected": true,
@@ -341,7 +341,7 @@ paths:
         Full flow check:
         1. If subscription_status is empty → show checkout
         2. If onboarding_step is OnboardingStepDrive → show Drive linking
-        3. If onboarding_step is OnboardingStepChrome → show Chrome setup
+        3. If onboarding_step is OnboardingStepSession → show browser session
         4. If onboarding_step is OnboardingStepWatchFolder → show watch folder picker
         5. If onboarding_step is complete → show dashboard
       responses:

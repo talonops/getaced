@@ -132,7 +132,7 @@ func DriveCallback(c fiber.Ctx) error {
 	database.DB.Model(&structs.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
 		"drive_refresh_token": encryptedToken,
 		"drive_email":         driveEmail,
-		"onboarding_step":     structs.OnboardingStepChrome,
+		"onboarding_step":     structs.OnboardingStepSession,
 	})
 
 	frontendURL := config.Config("FRONTEND_URL")
@@ -140,7 +140,7 @@ func DriveCallback(c fiber.Ctx) error {
 		frontendURL = "https://getaced.io"
 	}
 
-	return c.Redirect().To(frontendURL + "/onboarding?step=chrome")
+	return c.Redirect().To(frontendURL + "/onboarding?step=session")
 }
 
 // CleanupExpiredOAuthStates removes expired state tokens from memory

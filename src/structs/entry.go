@@ -13,7 +13,7 @@ type OnboardingStep string
 
 const (
 	OnboardingStepDrive       OnboardingStep = "OnboardingStepDrive"
-	OnboardingStepChrome      OnboardingStep = "OnboardingStepChrome"
+	OnboardingStepSession     OnboardingStep = "OnboardingStepSession"
 	OnboardingStepWatchFolder OnboardingStep = "OnboardingStepWatchFolder"
 	OnboardingStepComplete    OnboardingStep = "complete"
 )

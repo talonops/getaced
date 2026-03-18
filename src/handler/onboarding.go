@@ -26,7 +26,7 @@ func CreateSetupSession(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "onboarding complete"})
 	}
 
-	if user.OnboardingStep != structs.OnboardingStepChrome {
+	if user.OnboardingStep != structs.OnboardingStepSession {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid onboarding step"})
 	}
 
@@ -42,7 +42,7 @@ func CreateSetupSession(c fiber.Ctx) error {
 	})
 }
 
-func CompleteOnboarding(c fiber.Ctx) error {
+func CompleteSession(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uint)
 
 	var user structs.User
@@ -54,7 +54,7 @@ func CompleteOnboarding(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "onboarding already complete"})
 	}
 
-	if user.OnboardingStep != structs.OnboardingStepChrome {
+	if user.OnboardingStep != structs.OnboardingStepSession {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "complete previous steps first"})
 	}
 
