@@ -118,28 +118,21 @@ paths:
         single-use and expires in 30 seconds.
 
 
-        Response:
-
-        {
-          "token": "eyJhbGciOiJIUzI1NiIs..."
-        }
-
-
-        Set the token as the jwt_token collection variable.
+        Response: {"token": "eyJhbGciOiJIUzI1NiIs..."}
       requestBody:
+        required: true
         content:
-          '*/*':
+          application/json:
             schema:
-              type: string
-              example: '"{\n  \"code\": \"PASTE_AUTH_CODE_HERE\"\n}"'
+              type: object
+              required:
+                - code
+              properties:
+                code:
+                  type: string
+                  example: PASTE_AUTH_CODE_HERE
       security:
         - noauthAuth: []
-      parameters:
-        - name: Content-Type
-          in: header
-          schema:
-            type: string
-          example: application/json
       responses:
         '200':
           description: Successful response
@@ -159,20 +152,21 @@ paths:
 
         Response: {"checkout_url": "https://checkout.creem.io/..."}
       requestBody:
+        required: true
         content:
-          '*/*':
+          application/json:
             schema:
-              type: string
-              example: >-
-                "{\n  \"product_id\": \"{{yearly_product_id}}\",\n 
-                \"success_url\":
-                \"https://getaced.io/dashboard?payment=success\"\n}"
-      parameters:
-        - name: Content-Type
-          in: header
-          schema:
-            type: string
-          example: application/json
+              type: object
+              required:
+                - product_id
+                - success_url
+              properties:
+                product_id:
+                  type: string
+                  example: prod_abc123
+                success_url:
+                  type: string
+                  example: https://getaced.io/dashboard?payment=success
       responses:
         '200':
           description: Successful response
@@ -250,8 +244,6 @@ paths:
 
         If container already exists (retry), it deletes the old one and creates
         fresh.
-      requestBody:
-        content: {}
       responses:
         '200':
           description: Successful response
@@ -268,8 +260,6 @@ paths:
         Requires active subscription or trial (402 if not).
 
         Response: {"onboarding_step": "OnboardingStepWatchFolder"}
-      requestBody:
-        content: {}
       responses:
         '200':
           description: Successful response
@@ -285,7 +275,7 @@ paths:
 
         Requires active subscription or trial (402 if not).
 
-        folder_id from: https://drive.google.com/drive/folders/<THIS_PART>
+        Accepts a full Google Drive folder URL or a raw folder ID.
 
         Validates the folder exists and is accessible in Google Drive. Registers Drive push notifications.
 
@@ -293,17 +283,18 @@ paths:
 
         400 if folder not found, Drive not connected, or wrong onboarding step.
       requestBody:
+        required: true
         content:
-          '*/*':
+          application/json:
             schema:
-              type: string
-              example: '"{\n  \"folder_id\": \"PASTE_DRIVE_FOLDER_ID_HERE\"\n}"'
-      parameters:
-        - name: Content-Type
-          in: header
-          schema:
-            type: string
-          example: application/json
+              type: object
+              required:
+                - folder_url
+              properties:
+                folder_url:
+                  type: string
+                  description: Full Google Drive folder URL or raw folder ID
+                  example: https://drive.google.com/drive/folders/1aBcDeFgHiJkLmNoPqRsT
       responses:
         '200':
           description: Successful response
@@ -389,36 +380,29 @@ paths:
       tags:
         - Settings
       summary: Set Watch Folder
-      description: >-
-        Sets which Drive folder to monitor. Also registers Drive push
-        notifications.
+      description: |-
+        Sets which Drive folder to monitor. Also registers Drive push notifications.
 
-
-        folder_id from: https://drive.google.com/drive/folders/<THIS_PART>
-
-
-        Folder ID must be alphanumeric (with hyphens/underscores).
-
+        Accepts a full Google Drive folder URL or a raw folder ID.
 
         Validates folder exists.
 
-
         Response: {"watch_folder_id": "..."}
-
 
         400 if folder not found or Drive not connected.
       requestBody:
+        required: true
         content:
-          '*/*':
+          application/json:
             schema:
-              type: string
-              example: '"{\n  \"folder_id\": \"PASTE_DRIVE_FOLDER_ID_HERE\"\n}"'
-      parameters:
-        - name: Content-Type
-          in: header
-          schema:
-            type: string
-          example: application/json
+              type: object
+              required:
+                - folder_url
+              properties:
+                folder_url:
+                  type: string
+                  description: Full Google Drive folder URL or raw folder ID
+                  example: https://drive.google.com/drive/folders/1aBcDeFgHiJkLmNoPqRsT
       responses:
         '200':
           description: Successful response
@@ -429,27 +413,24 @@ paths:
       tags:
         - Settings
       summary: Set Bookmark Folder
-      description: >-
-        Sets Chrome bookmark folder name where answers appear. Default: "school
-        work".
-
+      description: |-
+        Sets Chrome bookmark folder name where answers appear. Default: "school work".
 
         Max 100 characters.
 
-
         Response: {"bookmark_folder_name": "..."}
       requestBody:
+        required: true
         content:
-          '*/*':
+          application/json:
             schema:
-              type: string
-              example: '"{\n  \"folder_name\": \"school work\"\n}"'
-      parameters:
-        - name: Content-Type
-          in: header
-          schema:
-            type: string
-          example: application/json
+              type: object
+              required:
+                - folder_name
+              properties:
+                folder_name:
+                  type: string
+                  example: school work
       responses:
         '200':
           description: Successful response
@@ -467,19 +448,17 @@ paths:
 
         Response: {"custom_prompt": "..."}
       requestBody:
+        required: true
         content:
-          '*/*':
+          application/json:
             schema:
-              type: string
-              example: >-
-                "{\n  \"custom_prompt\": \"This is AP Chemistry, use proper
-                notation\"\n}"
-      parameters:
-        - name: Content-Type
-          in: header
-          schema:
-            type: string
-          example: application/json
+              type: object
+              required:
+                - custom_prompt
+              properties:
+                custom_prompt:
+                  type: string
+                  example: This is AP Chemistry, use proper notation
       responses:
         '200':
           description: Successful response
@@ -566,22 +545,24 @@ paths:
         Idempotent: uses Creem event ID to prevent double-processing.
       requestBody:
         content:
-          '*/*':
+          application/json:
             schema:
-              type: string
-              example: >-
-                "{\n  \"id\": \"evt_xxx\",\n  \"eventType\":
-                \"checkout.completed\",\n  \"object\": { ... }\n}"
+              type: object
+              properties:
+                id:
+                  type: string
+                  example: evt_xxx
+                eventType:
+                  type: string
+                  example: checkout.completed
+                object:
+                  type: object
       security:
         - noauthAuth: []
       parameters:
-        - name: Content-Type
-          in: header
-          schema:
-            type: string
-          example: application/json
         - name: creem-signature
           in: header
+          required: true
           schema:
             type: string
           example: HMAC_SHA256_SIGNATURE
@@ -604,8 +585,6 @@ paths:
 
         Enqueues user for debounced processing (2s delay to batch rapid
         changes).
-      requestBody:
-        content: {}
       security:
         - noauthAuth: []
       parameters:

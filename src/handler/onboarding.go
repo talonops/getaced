@@ -67,10 +67,15 @@ func SetOnboardingWatchFolder(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uint)
 
 	var body struct {
-		FolderID string `json:"folder_id"`
+		FolderURL string `json:"folder_url"`
 	}
-	if err := c.Bind().JSON(&body); err != nil || body.FolderID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "folder_id required"})
+	if err := c.Bind().JSON(&body); err != nil || body.FolderURL == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "folder_url required"})
+	}
+
+	folderID := extractFolderID(body.FolderURL)
+	if folderID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "could not extract folder ID from URL"})
 	}
 
 	var user structs.User
@@ -97,12 +102,12 @@ func SetOnboardingWatchFolder(c fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to connect to drive"})
 	}
 
-	if err := drive.ValidateFolder(srv, body.FolderID); err != nil {
+	if err := drive.ValidateFolder(srv, folderID); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid folder: " + err.Error()})
 	}
 
 	database.DB.Model(&user).Updates(map[string]interface{}{
-		"watch_folder_id": body.FolderID,
+		"watch_folder_id": folderID,
 		"onboarding_step": structs.OnboardingStepComplete,
 	})
 
@@ -112,6 +117,6 @@ func SetOnboardingWatchFolder(c fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"onboarding_step": "complete",
-		"watch_folder_id": body.FolderID,
+		"watch_folder_id": folderID,
 	})
 }
