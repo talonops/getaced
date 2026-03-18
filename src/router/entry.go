@@ -18,7 +18,7 @@ func Routes(app *fiber.App) {
 		novncPath = config.DefaultNoVNCPath
 	}
 	app.Get("/novnc/*", static.New(novncPath))
-	app.Use("/docs", static.New("./docs"))
+	app.Get("/docs/*", static.New("./docs"))
 
 	// Public auth routes
 	v1.Get("/auth/google", handler.GoogleAuth)
