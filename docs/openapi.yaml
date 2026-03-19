@@ -8,14 +8,14 @@ info:
     All protected routes need: Authorization: Bearer <token>
 
 
-    Flow: Sign in → Exchange Code → Checkout (starts trial) → Link Drive →
-    Browser Session → Set Watch Folder → Drop files
+    Flow: Sign in → Exchange Code → Checkout (starts trial) → Link Drive → Set
+    Watch Folder → Browser Session → Drop files
 
 
     Trials handled by Creem. 30 uses/month. Supported files: PNG, HTML.
   version: 1.0.0
 servers:
-  - url: https://api.getaced.io/v1
+  - url: http://{{base_url}}
 components:
   securitySchemes:
     noauthAuth:
@@ -35,31 +35,27 @@ tags:
 
       2. After redirect, grab the `code` from the URL and exchange it for a JWT
       via POST /auth/exchange
-  - name: Payment
+  - name: Payment (Step 1 after Sign In)
     description: >-
-      Required before onboarding. Creem handles the 1-week free trial — user
-      enters payment info but isn't charged for 7 days.
-  - name: Billing
+      Payment is required BEFORE onboarding. Creem handles the 1-week free trial
+      — user enters payment info but isn't charged for 7 days.
+  - name: Onboarding (Step 2 — requires payment/trial)
     description: >-
-      Subscription management via Creem customer portal. Returns a magic link
-      that redirects users to manage subscriptions, payment methods, and billing
-      history. No active subscription required — works for canceled/expired users
-      too.
-  - name: Onboarding
-    description: >-
-      Requires active subscription or trial (402 if not).
+      All onboarding endpoints require active subscription or trial (402 if
+      not).
 
 
-      Steps: 1. Link Drive → 2. Browser Session → 3. Complete Session → 4. Set Watch Folder
+      Steps: 1. Link Drive → 2. Set Watch Folder → 3. Browser Session → 4.
+      Complete Session
   - name: User
-  - name: Settings
-    description: Requires active subscription or trial (402 if not).
-  - name: Usage & Activity
-    description: Requires active subscription or trial (402 if not).
-  - name: Webhooks
+  - name: Settings (requires payment/trial)
+    description: All require active subscription or trial (402 if not).
+  - name: Usage & Activity (requires payment/trial)
+    description: Require active subscription or trial (402 if not).
+  - name: Webhooks (server-to-server)
     description: >-
-      Called by external services (Creem, Google Drive), not by the frontend.
-      Documented for reference.
+      These endpoints are called by external services, not by the frontend.
+      Documented here for reference.
 paths:
   /health:
     get:
@@ -85,15 +81,14 @@ paths:
     get:
       tags:
         - Auth
-      summary: 1. Get Google Sign In URL
+      summary: 1. Google Sign In (open in browser)
       description: >-
-        Returns Google OAuth URL. Open it in the browser to start sign-in.
+        Redirects to Google consent screen. After login redirects to:
 
-        Response: {"url": "https://accounts.google.com/..."}
-
-
-        After login, Google redirects to:
         {FRONTEND_URL}/auth/callback?code=<auth_code>
+
+
+        Open in browser. Copy the `code` from the redirect URL.
 
 
         The code is single-use and expires in 30 seconds. Exchange it for a JWT
@@ -118,21 +113,28 @@ paths:
         single-use and expires in 30 seconds.
 
 
-        Response: {"token": "eyJhbGciOiJIUzI1NiIs..."}
+        Response:
+
+        {
+          "token": "eyJhbGciOiJIUzI1NiIs..."
+        }
+
+
+        Set the token as the jwt_token collection variable.
       requestBody:
-        required: true
         content:
-          application/json:
+          '*/*':
             schema:
-              type: object
-              required:
-                - code
-              properties:
-                code:
-                  type: string
-                  example: PASTE_AUTH_CODE_HERE
+              type: string
+              example: '"{\n  \"code\": \"PASTE_AUTH_CODE_HERE\"\n}"'
       security:
         - noauthAuth: []
+      parameters:
+        - name: Content-Type
+          in: header
+          schema:
+            type: string
+          example: application/json
       responses:
         '200':
           description: Successful response
@@ -141,52 +143,27 @@ paths:
   /checkout:
     post:
       tags:
-        - Payment
-      summary: Create Checkout
+        - Payment (Step 1 after Sign In)
+      summary: Checkout (Yearly)
       description: |-
-        Creates a Creem checkout session for monthly or yearly plan. Pass the appropriate product_id.
-
-        success_url must start with the configured frontend domain.
-
-        Creem handles the 1-week free trial — user enters payment info but isn't charged for 7 days.
+        Creates Creem checkout for yearly plan.
 
         Response: {"checkout_url": "https://checkout.creem.io/..."}
       requestBody:
-        required: true
         content:
-          application/json:
+          '*/*':
             schema:
-              type: object
-              required:
-                - product_id
-                - success_url
-              properties:
-                product_id:
-                  type: string
-                  example: prod_abc123
-                success_url:
-                  type: string
-                  example: https://getaced.io/dashboard?payment=success
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json: {}
-  /billing:
-    post:
-      tags:
-        - Billing
-      summary: Customer Portal
-      description: |-
-        Returns a Creem customer portal magic link. The user can manage their subscription, update payment methods, and view billing history.
-
-        No active subscription required — users with canceled or expired subscriptions can still access the portal.
-
-        Requires a Creem customer ID (set after first checkout).
-
-        Response: {"portal_url": "https://creem.io/my-orders/login/xxx"}
-
-        400 if user has no subscription history.
+              type: string
+              example: >-
+                "{\n  \"product_id\": \"{{yearly_product_id}}\",\n 
+                \"success_url\":
+                \"https://getaced.io/dashboard?payment=success\"\n}"
+      parameters:
+        - name: Content-Type
+          in: header
+          schema:
+            type: string
+          example: application/json
       responses:
         '200':
           description: Successful response
@@ -195,7 +172,7 @@ paths:
   /auth/google/drive:
     get:
       tags:
-        - Onboarding
+        - Onboarding (Step 2 — requires payment/trial)
       summary: 1. Get Drive Auth URL
       description: >-
         Returns Google Drive OAuth URL. User must be on step
@@ -219,10 +196,51 @@ paths:
           description: Successful response
           content:
             application/json: {}
+  /onboarding/watch-folder:
+    post:
+      tags:
+        - Onboarding (Step 2 — requires payment/trial)
+      summary: 2. Set Watch Folder
+      description: >-
+        Sets the Drive folder to monitor. User must be on the WatchFolder step.
+
+
+        Requires active subscription or trial (402 if not).
+
+
+        folder_id from: https://drive.google.com/drive/folders/<THIS_PART>
+
+
+        Validates the folder exists and is accessible. Registers Drive push
+        notifications.
+
+
+        Response: {"onboarding_step": "OnboardingStepSession",
+        "watch_folder_id": "..."}
+
+
+        400 if folder not found, Drive not connected, or wrong onboarding step.
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              type: string
+              example: '"{\n  \"folder_id\": \"PASTE_DRIVE_FOLDER_ID_HERE\"\n}"'
+      parameters:
+        - name: Content-Type
+          in: header
+          schema:
+            type: string
+          example: application/json
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
   /onboarding/session:
     post:
       tags:
-        - Onboarding
+        - Onboarding (Step 2 — requires payment/trial)
       summary: 3. Create Browser Session
       description: >-
         Creates a remote browser container with VNC. User must be on step
@@ -236,7 +254,7 @@ paths:
 
 
         Open session_url in browser/iframe. 5 min window. User signs into Google
-        in Chrome.
+        in the remote browser.
 
 
         Returns 500 if VNC fails to start within 15 seconds.
@@ -244,6 +262,8 @@ paths:
 
         If container already exists (retry), it deletes the old one and creates
         fresh.
+      requestBody:
+        content: {}
       responses:
         '200':
           description: Successful response
@@ -252,49 +272,19 @@ paths:
   /onboarding/session/complete:
     post:
       tags:
-        - Onboarding
+        - Onboarding (Step 2 — requires payment/trial)
       summary: 4. Complete Browser Session & Finish Onboarding
-      description: |-
-        Advances onboarding from Session step to complete. Call after the user finishes the browser session.
+      description: >-
+        Advances from Session step to complete. Call after the user finishes the
+        browser session.
+
 
         Requires active subscription or trial (402 if not).
+
 
         Response: {"onboarding_step": "complete"}
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json: {}
-  /onboarding/watch-folder:
-    post:
-      tags:
-        - Onboarding
-      summary: 2. Set Watch Folder
-      description: |-
-        Sets the Drive folder to monitor. User must be on the WatchFolder step.
-
-        Requires active subscription or trial (402 if not).
-
-        Accepts a full Google Drive folder URL or a raw folder ID.
-
-        Validates the folder exists and is accessible in Google Drive. Registers Drive push notifications.
-
-        Response: {"onboarding_step": "OnboardingStepSession", "watch_folder_id": "..."}
-
-        400 if folder not found, Drive not connected, or wrong onboarding step.
       requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - folder_url
-              properties:
-                folder_url:
-                  type: string
-                  description: Full Google Drive folder URL or raw folder ID
-                  example: https://drive.google.com/drive/folders/1aBcDeFgHiJkLmNoPqRsT
+        content: {}
       responses:
         '200':
           description: Successful response
@@ -305,10 +295,12 @@ paths:
       tags:
         - User
       summary: Get Me
-      description: |-
+      description: >-
         Full user profile.
 
+
         Response:
+
         {
           "id": 1,
           "email": "student@gmail.com",
@@ -327,14 +319,23 @@ paths:
           "is_active": true
         }
 
+
         Use onboarding_step to route user to correct page.
+
         Use is_active to gate features.
 
+
         Full flow check:
+
         1. If subscription_status is empty → show checkout
+
         2. If onboarding_step is OnboardingStepDrive → show Drive linking
-        3. If onboarding_step is OnboardingStepWatchFolder → show watch folder picker
+
+        3. If onboarding_step is OnboardingStepWatchFolder → show watch folder
+        picker
+
         4. If onboarding_step is OnboardingStepSession → show browser session
+
         5. If onboarding_step is complete → show dashboard
       responses:
         '200':
@@ -360,7 +361,7 @@ paths:
   /settings:
     get:
       tags:
-        - Settings
+        - Settings (requires payment/trial)
       summary: Get Settings
       description: |-
         Response:
@@ -378,31 +379,38 @@ paths:
   /settings/watch-folder:
     put:
       tags:
-        - Settings
+        - Settings (requires payment/trial)
       summary: Set Watch Folder
-      description: |-
-        Sets which Drive folder to monitor. Also registers Drive push notifications.
+      description: >-
+        Sets which Drive folder to monitor. Also registers Drive push
+        notifications.
 
-        Accepts a full Google Drive folder URL or a raw folder ID.
+
+        folder_id from: https://drive.google.com/drive/folders/<THIS_PART>
+
+
+        Folder ID must be alphanumeric (with hyphens/underscores).
+
 
         Validates folder exists.
 
+
         Response: {"watch_folder_id": "..."}
+
 
         400 if folder not found or Drive not connected.
       requestBody:
-        required: true
         content:
-          application/json:
+          '*/*':
             schema:
-              type: object
-              required:
-                - folder_url
-              properties:
-                folder_url:
-                  type: string
-                  description: Full Google Drive folder URL or raw folder ID
-                  example: https://drive.google.com/drive/folders/1aBcDeFgHiJkLmNoPqRsT
+              type: string
+              example: '"{\n  \"folder_id\": \"PASTE_DRIVE_FOLDER_ID_HERE\"\n}"'
+      parameters:
+        - name: Content-Type
+          in: header
+          schema:
+            type: string
+          example: application/json
       responses:
         '200':
           description: Successful response
@@ -411,26 +419,29 @@ paths:
   /settings/bookmark-folder:
     put:
       tags:
-        - Settings
+        - Settings (requires payment/trial)
       summary: Set Bookmark Folder
-      description: |-
-        Sets Chrome bookmark folder name where answers appear. Default: "school work".
+      description: >-
+        Sets Chrome bookmark folder name where answers appear. Default: "school
+        work".
+
 
         Max 100 characters.
 
+
         Response: {"bookmark_folder_name": "..."}
       requestBody:
-        required: true
         content:
-          application/json:
+          '*/*':
             schema:
-              type: object
-              required:
-                - folder_name
-              properties:
-                folder_name:
-                  type: string
-                  example: school work
+              type: string
+              example: '"{\n  \"folder_name\": \"school work\"\n}"'
+      parameters:
+        - name: Content-Type
+          in: header
+          schema:
+            type: string
+          example: application/json
       responses:
         '200':
           description: Successful response
@@ -439,7 +450,7 @@ paths:
   /settings/prompt:
     put:
       tags:
-        - Settings
+        - Settings (requires payment/trial)
       summary: Set Custom Prompt
       description: |-
         Appended to AI system prompt. Send empty string to clear.
@@ -448,17 +459,19 @@ paths:
 
         Response: {"custom_prompt": "..."}
       requestBody:
-        required: true
         content:
-          application/json:
+          '*/*':
             schema:
-              type: object
-              required:
-                - custom_prompt
-              properties:
-                custom_prompt:
-                  type: string
-                  example: This is AP Chemistry, use proper notation
+              type: string
+              example: >-
+                "{\n  \"custom_prompt\": \"This is AP Chemistry, use proper
+                notation\"\n}"
+      parameters:
+        - name: Content-Type
+          in: header
+          schema:
+            type: string
+          example: application/json
       responses:
         '200':
           description: Successful response
@@ -467,7 +480,7 @@ paths:
   /usage:
     get:
       tags:
-        - Usage & Activity
+        - Usage & Activity (requires payment/trial)
       summary: Get Usage
       description: |-
         Usage stats with daily breakdown for last 30 days.
@@ -495,7 +508,7 @@ paths:
   /activity:
     get:
       tags:
-        - Usage & Activity
+        - Usage & Activity (requires payment/trial)
       summary: Get Activity
       description: |-
         Last 20 processed files with answers.
@@ -519,7 +532,7 @@ paths:
   /webhooks/creem:
     post:
       tags:
-        - Webhooks
+        - Webhooks (server-to-server)
       summary: Creem Payment Webhook
       description: >-
         Called by Creem on payment events. Verified via HMAC-SHA256 signature.
@@ -545,24 +558,22 @@ paths:
         Idempotent: uses Creem event ID to prevent double-processing.
       requestBody:
         content:
-          application/json:
+          '*/*':
             schema:
-              type: object
-              properties:
-                id:
-                  type: string
-                  example: evt_xxx
-                eventType:
-                  type: string
-                  example: checkout.completed
-                object:
-                  type: object
+              type: string
+              example: >-
+                "{\n  \"id\": \"evt_xxx\",\n  \"eventType\":
+                \"checkout.completed\",\n  \"object\": { ... }\n}"
       security:
         - noauthAuth: []
       parameters:
+        - name: Content-Type
+          in: header
+          schema:
+            type: string
+          example: application/json
         - name: creem-signature
           in: header
-          required: true
           schema:
             type: string
           example: HMAC_SHA256_SIGNATURE
@@ -574,7 +585,7 @@ paths:
   /webhooks/drive:
     post:
       tags:
-        - Webhooks
+        - Webhooks (server-to-server)
       summary: Drive Push Notification
       description: >-
         Called by Google Drive when files change in a watched folder.
@@ -585,6 +596,8 @@ paths:
 
         Enqueues user for debounced processing (2s delay to batch rapid
         changes).
+      requestBody:
+        content: {}
       security:
         - noauthAuth: []
       parameters:
