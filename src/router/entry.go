@@ -19,6 +19,9 @@ func Routes(app *fiber.App) {
 	}
 	app.Get("/novnc/*", static.New(novncPath))
 	app.Get("/docs/*", static.New("./docs"))
+	app.Get("/", func(c fiber.Ctx) error {
+		return c.Redirect().To("/docs/")
+	})
 
 	// Public auth routes
 	v1.Get("/auth/google", handler.GoogleAuth)
