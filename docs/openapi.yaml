@@ -1,0 +1,617 @@
+openapi: 3.0.0
+info:
+  title: api.getaced.io
+  description: >-
+    Base URL: https://api.getaced.io/v1
+
+
+    All protected routes need: Authorization: Bearer <token>
+
+
+    Flow: Sign in → Exchange Code → Checkout (starts trial) → Link Drive → Set
+    Watch Folder → Browser Session → Drop files
+
+
+    Trials handled by Creem. 30 uses/month. Supported files: PNG, HTML.
+  version: 1.0.0
+servers:
+  - url: http://{{base_url}}
+components:
+  securitySchemes:
+    noauthAuth:
+      type: http
+      scheme: noauth
+    bearerAuth:
+      type: http
+      scheme: bearer
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+    description: >-
+      Two-step auth flow:
+
+      1. Open Google Sign In URL in browser
+
+      2. After redirect, grab the `code` from the URL and exchange it for a JWT
+      via POST /auth/exchange
+  - name: Payment
+    description: >-
+      Payment is required BEFORE onboarding. Creem handles the 1-week free trial
+      — user enters payment info but isn't charged for 7 days.
+  - name: Onboarding (requires payment/trial)
+    description: >-
+      All onboarding endpoints require active subscription or trial (402 if
+      not).
+
+
+      Steps: 1. Link Drive → 2. Set Watch Folder → 3. Browser Session → 4.
+      Complete Session
+  - name: User
+  - name: Settings (requires payment/trial)
+    description: All require active subscription or trial (402 if not).
+  - name: Usage & Activity (requires payment/trial)
+    description: Require active subscription or trial (402 if not).
+  - name: Webhooks (server-to-server)
+    description: Called by external services, not by the frontend.
+  - name: Health
+paths:
+  /auth/google:
+    get:
+      tags:
+        - Auth
+      summary: Google Sign In (open in browser)
+      description: |-
+        Redirects to Google consent screen. After login redirects to:
+        {FRONTEND_URL}/auth/callback?code=<auth_code>
+
+        Open in browser. Copy the `code` from the redirect URL.
+
+        The code is single-use and expires in 30 seconds.
+      security:
+        - noauthAuth: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /auth/exchange:
+    post:
+      tags:
+        - Auth
+      summary: Exchange Auth Code for JWT
+      description: |-
+        Exchanges a short-lived auth code (30s) for a JWT token.
+
+        Response: {"token": "eyJhbG..."}
+
+        Set the token as the jwt_token collection variable.
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              type: string
+              example: '"{\n  \"code\": \"PASTE_AUTH_CODE_HERE\"\n}"'
+      security:
+        - noauthAuth: []
+      parameters:
+        - name: Content-Type
+          in: header
+          schema:
+            type: string
+          example: application/json
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /checkout:
+    post:
+      tags:
+        - Payment
+      summary: Checkout
+      description: >-
+        Creates a Creem checkout session. product_id determines the plan
+        (monthly or quarterly).
+
+
+        success_url must start with the configured FRONTEND_URL domain.
+
+
+        Response: {"checkout_url": "https://checkout.creem.io/..."}
+
+
+        Redirect user to checkout_url. After payment, Creem webhook updates
+        subscription_status.
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              type: string
+              example: >-
+                "{\n  \"product_id\": \"PRODUCT_ID_HERE\",\n  \"success_url\":
+                \"https://getaced.io/dashboard?payment=success\"\n}"
+      parameters:
+        - name: Content-Type
+          in: header
+          schema:
+            type: string
+          example: application/json
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /billing:
+    post:
+      tags:
+        - Payment
+      summary: Billing Portal
+      description: |-
+        Returns Creem customer portal URL for managing subscription.
+
+        User must have an existing subscription.
+
+        Response: {"portal_url": "https://customer-portal.creem.io/..."}
+      requestBody:
+        content: {}
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /auth/google/drive:
+    get:
+      tags:
+        - Onboarding (requires payment/trial)
+      summary: 1. Get Drive Auth URL
+      description: >-
+        Returns Google Drive OAuth URL. User must be on step
+        OnboardingStepDrive.
+
+
+        Response: {"url": "https://accounts.google.com/..."}
+
+
+        Open URL in browser. After consent, redirects to
+        {FRONTEND_URL}/onboarding?step=watch-folder
+
+
+        Prevents duplicate Drive accounts — if this Drive is already linked to
+        another user, returns error.
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /onboarding/watch-folder:
+    post:
+      tags:
+        - Onboarding (requires payment/trial)
+      summary: 2. Set Watch Folder
+      description: >-
+        Sets the Drive folder to monitor. User must be on the WatchFolder step.
+
+
+        Accepts a full Google Drive folder URL or a raw folder ID.
+
+
+        Validates the folder exists and is accessible. Registers Drive push
+        notifications.
+
+
+        Response: {"onboarding_step": "OnboardingStepSession",
+        "watch_folder_id": "..."}
+
+
+        400 if folder not found, Drive not connected, or wrong onboarding step.
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              type: string
+              example: >-
+                "{\n  \"folder_url\":
+                \"https://drive.google.com/drive/folders/FOLDER_ID_HERE\"\n}"
+      parameters:
+        - name: Content-Type
+          in: header
+          schema:
+            type: string
+          example: application/json
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /onboarding/session:
+    post:
+      tags:
+        - Onboarding (requires payment/trial)
+      summary: 3. Create Browser Session
+      description: >-
+        Creates a remote browser container with VNC. User must be on step
+        OnboardingStepSession.
+
+
+        Response: {"session_url": "https://api.getaced.io/v1/s/abc123"}
+
+
+        Open session_url in browser/iframe. 5 min window. User signs into Google
+        in the remote browser.
+
+
+        Returns 500 if VNC fails to start within 15 seconds.
+
+
+        If container already exists (retry), it deletes the old one and creates
+        fresh.
+      requestBody:
+        content: {}
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /onboarding/session/complete:
+    post:
+      tags:
+        - Onboarding (requires payment/trial)
+      summary: 4. Complete Browser Session
+      description: |-
+        Completes onboarding. Call after the user finishes the browser session.
+
+        Response: {"onboarding_step": "complete"}
+      requestBody:
+        content: {}
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /me:
+    get:
+      tags:
+        - User
+      summary: Get Me
+      description: >-
+        Full user profile.
+
+
+        Response:
+
+        {
+          "id": 1,
+          "email": "student@gmail.com",
+          "name": "John Doe",
+          "avatar_url": "https://lh3.googleusercontent.com/...",
+          "onboarding_step": "complete" | "OnboardingStepDrive" | "OnboardingStepWatchFolder" | "OnboardingStepSession",
+          "subscription_status": "trialing" | "active" | "canceled" | "past_due" | "expired" | "",
+          "subscription_id": "sub_xxx",
+          "has_drive_connected": true,
+          "watch_folder_id": "1aBcDeFg...",
+          "bookmark_folder_name": "school work",
+          "usage_count": 5,
+          "usage_limit": 30,
+          "is_trialing": false,
+          "is_subscription_active": true,
+          "is_active": true
+        }
+
+
+        Use onboarding_step to route user to correct page.
+
+        Use is_active to gate features.
+
+
+        Full flow check:
+
+        1. If subscription_status is empty → show checkout
+
+        2. If onboarding_step is OnboardingStepDrive → show Drive linking
+
+        3. If onboarding_step is OnboardingStepWatchFolder → show watch folder
+        picker
+
+        4. If onboarding_step is OnboardingStepSession → show browser session
+
+        5. If onboarding_step is complete → show dashboard
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /account:
+    delete:
+      tags:
+        - User
+      summary: Delete Account
+      description: >-
+        Permanently deletes user, their Chrome container, Drive watch, and all
+        processed files.
+
+
+        Response: {"message": "account deleted"}
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /settings:
+    get:
+      tags:
+        - Settings (requires payment/trial)
+      summary: Get Settings
+      description: |-
+        Response:
+        {
+          "watch_folder_id": "1aBcDeFg...",
+          "bookmark_folder_name": "school work",
+          "custom_prompt": "",
+          "has_drive_connected": true
+        }
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /settings/watch-folder:
+    put:
+      tags:
+        - Settings (requires payment/trial)
+      summary: Set Watch Folder
+      description: >-
+        Sets which Drive folder to monitor. Also registers Drive push
+        notifications.
+
+
+        Accepts a full Google Drive folder URL or a raw folder ID.
+
+
+        Validates folder exists and is accessible.
+
+
+        Response: {"watch_folder_id": "..."}
+
+
+        400 if folder not found or Drive not connected.
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              type: string
+              example: >-
+                "{\n  \"folder_url\":
+                \"https://drive.google.com/drive/folders/FOLDER_ID_HERE\"\n}"
+      parameters:
+        - name: Content-Type
+          in: header
+          schema:
+            type: string
+          example: application/json
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /settings/bookmark-folder:
+    put:
+      tags:
+        - Settings (requires payment/trial)
+      summary: Set Bookmark Folder
+      description: >-
+        Sets Chrome bookmark folder name where answers appear. Default: "school
+        work".
+
+
+        Max 100 characters.
+
+
+        Response: {"bookmark_folder_name": "..."}
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              type: string
+              example: '"{\n  \"folder_name\": \"school work\"\n}"'
+      parameters:
+        - name: Content-Type
+          in: header
+          schema:
+            type: string
+          example: application/json
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /settings/prompt:
+    put:
+      tags:
+        - Settings (requires payment/trial)
+      summary: Set Custom Prompt
+      description: |-
+        Appended to AI system prompt. Send empty string to clear.
+
+        Max 500 characters.
+
+        Response: {"custom_prompt": "..."}
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              type: string
+              example: >-
+                "{\n  \"custom_prompt\": \"This is AP Chemistry, use proper
+                notation\"\n}"
+      parameters:
+        - name: Content-Type
+          in: header
+          schema:
+            type: string
+          example: application/json
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /usage:
+    get:
+      tags:
+        - Usage & Activity (requires payment/trial)
+      summary: Get Usage
+      description: |-
+        Usage stats with daily breakdown for last 30 days.
+
+        Response:
+        {
+          "usage_count": 5,
+          "usage_limit": 30,
+          "usage_reset_at": "2026-04-15T00:00:00Z",
+          "subscription_status": "active",
+          "is_trialing": false,
+          "is_subscription_active": true,
+          "is_active": true,
+          "daily_usage": [
+            {"date": "2026-02-16", "count": 0},
+            {"date": "2026-02-17", "count": 3},
+            ...
+          ]
+        }
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /activity:
+    get:
+      tags:
+        - Usage & Activity (requires payment/trial)
+      summary: Get Activity
+      description: |-
+        Last 20 processed files with answers.
+
+        Response:
+        {
+          "activity": [
+            {
+              "file_name": "Screenshot.png",
+              "answer_count": 5,
+              "answers": [{"number": 1, "answer": "A"}, ...],
+              "processed_at": "2026-03-15T22:49:20Z"
+            }
+          ]
+        }
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /webhooks/creem:
+    post:
+      tags:
+        - Webhooks (server-to-server)
+      summary: Creem Payment Webhook
+      description: >-
+        Called by Creem on payment events. Verified via HMAC-SHA256 signature.
+
+
+        Events handled:
+
+        - checkout.completed — activates subscription
+
+        - subscription.active / subscription.paid — marks active
+
+        - subscription.trialing — marks trialing
+
+        - subscription.canceled — marks canceled, stops Drive watch, deletes
+        container
+
+        - subscription.past_due — marks past_due
+
+        - subscription.expired — marks expired, stops Drive watch, deletes
+        container
+
+
+        Idempotent: uses Creem event ID to prevent double-processing.
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              type: string
+              example: >-
+                "{\n  \"id\": \"evt_xxx\",\n  \"eventType\":
+                \"checkout.completed\",\n  \"object\": { ... }\n}"
+      security:
+        - noauthAuth: []
+      parameters:
+        - name: Content-Type
+          in: header
+          schema:
+            type: string
+          example: application/json
+        - name: creem-signature
+          in: header
+          schema:
+            type: string
+          example: HMAC_SHA256_SIGNATURE
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /webhooks/drive:
+    post:
+      tags:
+        - Webhooks (server-to-server)
+      summary: Drive Push Notification
+      description: >-
+        Called by Google Drive when files change in a watched folder.
+
+
+        Validated via channel token (timing-safe comparison).
+
+
+        Enqueues user for debounced processing (2s delay to batch rapid
+        changes).
+      requestBody:
+        content: {}
+      security:
+        - noauthAuth: []
+      parameters:
+        - name: X-Goog-Channel-ID
+          in: header
+          schema:
+            type: string
+          example: channel-uuid
+        - name: X-Goog-Resource-State
+          in: header
+          schema:
+            type: string
+          example: change
+        - name: X-Goog-Channel-Token
+          in: header
+          schema:
+            type: string
+          example: DRIVE_WEBHOOK_TOKEN
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health Check
+      description: |-
+        Returns server status and uptime.
+
+        Response: {"status": "ok", "uptime": "3d 14h 22m"}
+      security:
+        - noauthAuth: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
