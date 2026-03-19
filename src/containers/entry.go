@@ -173,11 +173,11 @@ func NewSession(userID uint) (string, error) {
 		return "", fmt.Errorf("failed to exec into container for setup mode: %w", err)
 	}
 
-	// Wait for VNC to be ready (websockify on port 6080)
+	// Wait for VNC to be ready (websockify on port 6080 + X display available)
 	ready := false
 	for i := 0; i < 30; i++ { // up to 15 seconds
 		op, err := Client.ExecInstance(containerName, api.InstanceExecPost{
-			Command:     []string{"sh", "-c", "ss -tlnp | grep -q 6080"},
+			Command:     []string{"sh", "-c", "ss -tlnp | grep -q 6080 && DISPLAY=:0 xdpyinfo >/dev/null 2>&1"},
 			WaitForWS:   true,
 			Interactive: false,
 		}, nil)
