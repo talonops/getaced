@@ -209,7 +209,7 @@ paths:
 
 
         Open URL in browser. After consent, redirects to
-        {FRONTEND_URL}/onboarding?step=session
+        {FRONTEND_URL}/onboarding?step=watch-folder
 
 
         Prevents duplicate Drive accounts — if this Drive is already linked to
@@ -223,7 +223,7 @@ paths:
     post:
       tags:
         - Onboarding
-      summary: 2. Create Browser Session
+      summary: 3. Create Browser Session
       description: >-
         Creates a remote browser container with VNC. User must be on step
         OnboardingStepSession.
@@ -253,13 +253,13 @@ paths:
     post:
       tags:
         - Onboarding
-      summary: 3. Complete Browser Session
+      summary: 4. Complete Browser Session & Finish Onboarding
       description: |-
-        Advances onboarding from Session step to Watch Folder step. Call after the user finishes the browser session.
+        Advances onboarding from Session step to complete. Call after the user finishes the browser session.
 
         Requires active subscription or trial (402 if not).
 
-        Response: {"onboarding_step": "OnboardingStepWatchFolder"}
+        Response: {"onboarding_step": "complete"}
       responses:
         '200':
           description: Successful response
@@ -269,9 +269,9 @@ paths:
     post:
       tags:
         - Onboarding
-      summary: 4. Set Watch Folder & Complete Onboarding
+      summary: 2. Set Watch Folder
       description: |-
-        Sets the Drive folder to monitor and completes onboarding. User must be on the WatchFolder step.
+        Sets the Drive folder to monitor. User must be on the WatchFolder step.
 
         Requires active subscription or trial (402 if not).
 
@@ -279,7 +279,7 @@ paths:
 
         Validates the folder exists and is accessible in Google Drive. Registers Drive push notifications.
 
-        Response: {"onboarding_step": "complete", "watch_folder_id": "..."}
+        Response: {"onboarding_step": "OnboardingStepSession", "watch_folder_id": "..."}
 
         400 if folder not found, Drive not connected, or wrong onboarding step.
       requestBody:
@@ -333,8 +333,8 @@ paths:
         Full flow check:
         1. If subscription_status is empty → show checkout
         2. If onboarding_step is OnboardingStepDrive → show Drive linking
-        3. If onboarding_step is OnboardingStepSession → show browser session
-        4. If onboarding_step is OnboardingStepWatchFolder → show watch folder picker
+        3. If onboarding_step is OnboardingStepWatchFolder → show watch folder picker
+        4. If onboarding_step is OnboardingStepSession → show browser session
         5. If onboarding_step is complete → show dashboard
       responses:
         '200':

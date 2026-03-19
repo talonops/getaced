@@ -59,10 +59,11 @@ func CompleteSession(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "complete previous steps first"})
 	}
 
-	database.DB.Model(&user).Update("onboarding_step", structs.OnboardingStepWatchFolder)
+	database.DB.Model(&user).Update("onboarding_step", structs.OnboardingStepComplete)
 	analytics.Track("onboarding_step_completed", userID, analytics.WithStep("session"))
+	analytics.Track("onboarding_step_completed", userID, analytics.WithStep("complete"))
 
-	return c.JSON(fiber.Map{"onboarding_step": structs.OnboardingStepWatchFolder})
+	return c.JSON(fiber.Map{"onboarding_step": structs.OnboardingStepComplete})
 }
 
 func SetOnboardingWatchFolder(c fiber.Ctx) error {
@@ -110,17 +111,16 @@ func SetOnboardingWatchFolder(c fiber.Ctx) error {
 
 	database.DB.Model(&user).Updates(map[string]interface{}{
 		"watch_folder_id": folderID,
-		"onboarding_step": structs.OnboardingStepComplete,
+		"onboarding_step": structs.OnboardingStepSession,
 	})
 	analytics.Track("onboarding_step_completed", userID, analytics.WithStep("watch_folder"))
-	analytics.Track("onboarding_step_completed", userID, analytics.WithStep("complete"))
 
 	if err := worker.RegisterUserWatch(user, srv); err != nil {
 		log.Printf("failed to register drive watch for user %d: %v", userID, err)
 	}
 
 	return c.JSON(fiber.Map{
-		"onboarding_step": "complete",
+		"onboarding_step": structs.OnboardingStepSession,
 		"watch_folder_id": folderID,
 	})
 }
