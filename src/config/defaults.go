@@ -16,7 +16,7 @@ const (
 	VNCSessionExpiry = 5 * time.Minute
 	JWTExpiry        = 7 * 24 * time.Hour
 
-	HTTPTimeoutOpenAI = 30 * time.Second
+	HTTPTimeoutOpenAI = 60 * time.Second
 	HTTPTimeoutCreem  = 15 * time.Second
 	HTTPTimeoutGoogle = 10 * time.Second
 
