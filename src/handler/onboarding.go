@@ -23,7 +23,7 @@ func CreateSetupSession(c fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "user not found"})
 	}
 
-	if user.OnboardingStep == structs.OnboardingStepComplete {
+	if user.OnboardingStep == structs.OnboardingComplete {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "onboarding complete"})
 	}
 
@@ -51,7 +51,7 @@ func CompleteSession(c fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "user not found"})
 	}
 
-	if user.OnboardingStep == structs.OnboardingStepComplete {
+	if user.OnboardingStep == structs.OnboardingComplete {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "onboarding already complete"})
 	}
 
@@ -59,11 +59,11 @@ func CompleteSession(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "complete previous steps first"})
 	}
 
-	database.DB.Model(&user).Update("onboarding_step", structs.OnboardingStepComplete)
+	database.DB.Model(&user).Update("onboarding_step", structs.OnboardingComplete)
 	analytics.Track("onboarding_step_completed", userID, analytics.WithStep("session"))
 	analytics.Track("onboarding_step_completed", userID, analytics.WithStep("complete"))
 
-	return c.JSON(fiber.Map{"onboarding_step": structs.OnboardingStepComplete})
+	return c.JSON(fiber.Map{"onboarding_step": structs.OnboardingComplete})
 }
 
 func SetOnboardingWatchFolder(c fiber.Ctx) error {

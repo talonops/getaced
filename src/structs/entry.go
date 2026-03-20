@@ -13,9 +13,9 @@ type OnboardingStep string
 
 const (
 	OnboardingStepDrive       OnboardingStep = "OnboardingStepDrive"
-	OnboardingStepSession     OnboardingStep = "OnboardingStepSession"
 	OnboardingStepWatchFolder OnboardingStep = "OnboardingStepWatchFolder"
-	OnboardingStepComplete    OnboardingStep = "complete"
+	OnboardingStepSession     OnboardingStep = "OnboardingStepSession"
+	OnboardingComplete        OnboardingStep = "OnboardingComplete"
 )
 
 // User is the main user model stored in SQLite
