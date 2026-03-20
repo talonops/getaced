@@ -5,13 +5,13 @@ import "time"
 const (
 	DefaultNoVNCPath   = "/home/talon/novnc-static"
 	DefaultFrontendURL = "https://getaced.io"
-	DefaultOpenAIModel = "gpt-4o"
+	DefaultOpenAIModel = "gpt-5.4-mini"
 
 	MaxBookmarkFolderNameLen = 100
 	MaxCustomPromptLen       = 500
 	UsageLimit               = 30
 
-	AuthCodeExpiry  = 30 * time.Second
+	AuthCodeExpiry   = 30 * time.Second
 	OAuthStateExpiry = 10 * time.Minute
 	VNCSessionExpiry = 5 * time.Minute
 	JWTExpiry        = 7 * 24 * time.Hour
@@ -21,7 +21,7 @@ const (
 	HTTPTimeoutGoogle = 10 * time.Second
 
 	// Creem product IDs
-	MonthlyProductID  = "prod_5EZyT4sixyBhWmVYxf1nwl"
+	MonthlyProductID   = "prod_5EZyT4sixyBhWmVYxf1nwl"
 	QuarterlyProductID = "prod_4iDmKqfGpdNhoLsDEHbw1K"
 
 	// Plan pricing in cents
