@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"strings"
 
@@ -170,6 +172,54 @@ func (c *Client) ProcessImage(imageBytes []byte, customPrompt string) (*structs.
 		{Role: "user", Content: content},
 	}
 	return c.doChat(messages)
+}
+
+// ExtractMHTML parses an MHTML file and returns just the HTML body.
+func ExtractMHTML(data []byte) ([]byte, error) {
+	// Find the Content-Type header to get the boundary
+	headerEnd := bytes.Index(data, []byte("\r\n\r\n"))
+	if headerEnd == -1 {
+		headerEnd = bytes.Index(data, []byte("\n\n"))
+	}
+	if headerEnd == -1 {
+		return nil, fmt.Errorf("no MIME header found")
+	}
+
+	header := string(data[:headerEnd])
+	var boundary string
+	for _, line := range strings.Split(header, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.Contains(strings.ToLower(line), "boundary") {
+			_, params, err := mime.ParseMediaType(line[strings.Index(line, ":")+1:])
+			if err == nil {
+				boundary = params["boundary"]
+			}
+			break
+		}
+	}
+	if boundary == "" {
+		// No multipart boundary — treat the whole thing as HTML
+		return data, nil
+	}
+
+	reader := multipart.NewReader(bytes.NewReader(data[headerEnd+4:]), boundary)
+	for {
+		part, err := reader.NextPart()
+		if err != nil {
+			break
+		}
+		ct := part.Header.Get("Content-Type")
+		if strings.Contains(ct, "text/html") {
+			body, err := io.ReadAll(part)
+			if err != nil {
+				return nil, fmt.Errorf("read html part: %w", err)
+			}
+			return body, nil
+		}
+		part.Close()
+	}
+
+	return nil, fmt.Errorf("no text/html part found in MHTML")
 }
 
 func StripHTML(htmlContent []byte) string {

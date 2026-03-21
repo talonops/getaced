@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -236,6 +237,15 @@ func processUser(user structs.User) error {
 		switch {
 		case mimeType == "text/html":
 			text := openaiPkg.StripHTML(data)
+			answers, tokenUsage, err = openaiClient.ProcessText(text, user.CustomPrompt)
+		case mimeType == "multipart/related", mimeType == "message/rfc822", strings.HasSuffix(strings.ToLower(file.Name), ".mhtml"), strings.HasSuffix(strings.ToLower(file.Name), ".mht"):
+			htmlBody, extractErr := openaiPkg.ExtractMHTML(data)
+			if extractErr != nil {
+				log.Printf("worker: failed to extract MHTML for file %s (user %d): %v", file.Name, user.ID, extractErr)
+				recordFailure(user.ID, file.ID, file.Name)
+				continue
+			}
+			text := openaiPkg.StripHTML(htmlBody)
 			answers, tokenUsage, err = openaiClient.ProcessText(text, user.CustomPrompt)
 		case mimeType == "image/png":
 			answers, tokenUsage, err = openaiClient.ProcessImage(data, user.CustomPrompt)
