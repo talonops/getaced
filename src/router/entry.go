@@ -48,9 +48,9 @@ func Routes(app *fiber.App) {
 	v1.Post("/billing", middleware.AuthRequired, handler.CustomerPortal)
 
 	// Onboarding (payment required)
+	v1.Post("/onboarding/watch-folder", middleware.AuthRequired, middleware.PaymentRequired, handler.SetOnboardingWatchFolder)
 	v1.Post("/onboarding/session", middleware.AuthRequired, middleware.PaymentRequired, handler.CreateSetupSession)
 	v1.Post("/onboarding/session/complete", middleware.AuthRequired, middleware.PaymentRequired, handler.CompleteSession)
-	v1.Post("/onboarding/watch-folder", middleware.AuthRequired, middleware.PaymentRequired, handler.SetOnboardingWatchFolder)
 
 	// Settings (payment required)
 	v1.Get("/settings", middleware.AuthRequired, middleware.PaymentRequired, handler.GetSettings)

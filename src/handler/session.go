@@ -30,13 +30,21 @@ func BrowserSession(c fiber.Ctx) error {
     import RFB from '/novnc/core/rfb.js';
     const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
     const url = proto + location.host + '/v1/ws/%s/websockify';
-    console.log('Connecting to:', url);
-    const rfb = new RFB(document.getElementById('vnc'), url, { wsProtocols: ['binary'] });
-    rfb.scaleViewport = true;
-    rfb.resizeSession = true;
-    rfb.addEventListener('connect', () => console.log('RFB connected'));
-    rfb.addEventListener('disconnect', (e) => console.log('RFB disconnected', e.detail));
-    rfb.addEventListener('securityfailure', (e) => console.log('RFB security failure', e.detail));
+    let retries = 0;
+    const maxRetries = 5;
+    function connect() {
+        console.log('Connecting to:', url, retries > 0 ? '(retry ' + retries + ')' : '');
+        const rfb = new RFB(document.getElementById('vnc'), url, { wsProtocols: ['binary'] });
+        rfb.scaleViewport = true;
+        rfb.resizeSession = true;
+        rfb.addEventListener('connect', () => { retries = 0; console.log('RFB connected'); });
+        rfb.addEventListener('disconnect', (e) => {
+            console.log('RFB disconnected', e.detail);
+            if (retries < maxRetries) { retries++; setTimeout(connect, 1000); }
+        });
+        rfb.addEventListener('securityfailure', (e) => console.log('RFB security failure', e.detail));
+    }
+    connect();
 </script>
 </body>
 </html>`, token)

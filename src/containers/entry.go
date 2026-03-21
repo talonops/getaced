@@ -177,7 +177,7 @@ func NewSession(userID uint) (string, error) {
 	ready := false
 	for i := 0; i < 30; i++ { // up to 15 seconds
 		op, err := Client.ExecInstance(containerName, api.InstanceExecPost{
-			Command:     []string{"sh", "-c", "ss -tlnp | grep -q 6080 && DISPLAY=:0 xdpyinfo >/dev/null 2>&1"},
+			Command:     []string{"sh", "-c", "ss -tlnp | grep -q 6080 && ss -tlnp | grep -q 5900 && DISPLAY=:1 xdpyinfo >/dev/null 2>&1"},
 			WaitForWS:   true,
 			Interactive: false,
 		}, nil)
