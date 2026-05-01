@@ -25,12 +25,8 @@ type User struct {
 	Email              string         `gorm:"uniqueIndex" json:"email"`
 	Name               string         `json:"name,omitempty"`
 	AvatarURL          string         `json:"avatar_url,omitempty"`
-	LastActiveAt       *time.Time     `json:"last_active_at,omitempty"`
-	OnboardingStep     OnboardingStep `json:"onboarding_step" gorm:"default:OnboardingStepDrive"`
-	CreemCustomerID    string         `json:"creem_customer_id,omitempty"`
-	SubscriptionID     string         `json:"subscription_id,omitempty"`
-	SubscriptionStatus string         `json:"subscription_status,omitempty"`
-	SubscriptionPaidAt *time.Time     `json:"subscription_paid_at,omitempty"`
+	LastActiveAt   *time.Time     `json:"last_active_at,omitempty"`
+	OnboardingStep OnboardingStep `json:"onboarding_step" gorm:"default:OnboardingStepDrive"`
 
 	// Drive integration
 	DriveEmail         string `json:"drive_email,omitempty"`
@@ -44,10 +40,9 @@ type User struct {
 	DriveChannelID     string     `json:"drive_channel_id,omitempty"`
 	DriveChannelExpiry *time.Time `json:"drive_channel_expiry,omitempty"`
 
-	// Payment enforcement
+	// Usage tracking
 	UsageCount   int        `json:"usage_count" gorm:"default:0"`
 	UsageResetAt *time.Time `json:"usage_reset_at,omitempty"`
-	TrialEndsAt  *time.Time `json:"trial_ends_at,omitempty"`
 }
 
 // GoogleResponse is the response from Google's userinfo API
@@ -57,31 +52,6 @@ type GoogleResponse struct {
 	Name     string `json:"name"`
 	Verified bool   `json:"verified_email"`
 	Picture  string `json:"picture"`
-}
-
-// CheckoutRequest is sent to Creem to create a checkout session
-type CheckoutRequest struct {
-	ProductID  string `json:"product_id"`
-	SuccessURL string `json:"success_url"`
-	RequestID  string `json:"request_id,omitempty"`
-}
-
-// CheckoutResponse is returned by Creem after creating a checkout
-type CheckoutResponse struct {
-	ID          string `json:"id"`
-	CheckoutURL string `json:"checkout_url"`
-}
-
-// BillingPortalResponse is returned by Creem for customer portal access
-type BillingPortalResponse struct {
-	CustomerPortalLink string `json:"customer_portal_link"`
-}
-
-// WebhookEvent is a Creem webhook payload
-type WebhookEvent struct {
-	ID        string                 `json:"id"`
-	EventType string                 `json:"eventType"`
-	Object    map[string]interface{} `json:"object"`
 }
 
 // SetupSession is used to store info while user is setting up a browser session
@@ -114,12 +84,6 @@ type AnswerResponse struct {
 	Answers []AnswerResult `json:"answers"`
 }
 
-// ProcessedWebhookEvent tracks Creem webhook events to ensure idempotency
-type ProcessedWebhookEvent struct {
-	gorm.Model
-	EventID string `gorm:"uniqueIndex"`
-}
-
 // FailedFile tracks files that failed processing to limit retries
 type FailedFile struct {
 	gorm.Model
@@ -149,10 +113,6 @@ type AnalyticsDailySnapshot struct {
 	TotalUsers     int
 	DAU            int
 	WAU            int
-	PayingUsers    int
-	TrialUsers     int
-	MRR            int
-	ChurnCount     int
 	FilesProcessed int
 	TokensInput    int
 	TokensOutput   int

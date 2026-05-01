@@ -3,6 +3,7 @@ package handler
 import (
 	"crypto/rand"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +16,17 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 )
+
+func isEmailAllowed(email string) bool {
+	raw := config.Config("ALLOWED_EMAILS")
+	target := strings.ToLower(strings.TrimSpace(email))
+	for _, entry := range strings.Split(raw, ",") {
+		if strings.ToLower(strings.TrimSpace(entry)) == target {
+			return true
+		}
+	}
+	return false
+}
 
 // OAuth state tokens — prevents CSRF on Google login
 var googleOAuthStates = struct {
@@ -82,6 +94,10 @@ func GoogleCallback(c fiber.Ctx) error {
 	userInfo, err := auth.GetUserInfo(token.AccessToken)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to get user info"})
+	}
+
+	if !isEmailAllowed(userInfo.Email) {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "access denied"})
 	}
 
 	// Upsert user

@@ -10,7 +10,6 @@ import (
 	"getaced.io/src/analytics"
 	"getaced.io/src/config"
 	"getaced.io/src/containers"
-	"getaced.io/src/creem"
 	"getaced.io/src/database"
 	"getaced.io/src/handler"
 	"getaced.io/src/openai"
@@ -28,13 +27,11 @@ func validateConfig() {
 		"GOOGLE_CLIENT_SECRET",
 		"GOOGLE_REDIRECT_URL",
 		"GOOGLE_DRIVE_REDIRECT_URL",
-		"CREEM_API_KEY",
-		"CREEM_WEBHOOK_SECRET",
-		"CREEM_BASE_URL",
 		"OPENAI_API_KEY",
 		"DRIVE_TOKEN_ENCRYPT_KEY",
 		"DRIVE_WEBHOOK_TOKEN",
 		"WEBHOOK_BASE_URL",
+		"ALLOWED_EMAILS",
 	}
 	for _, key := range required {
 		if config.Config(key) == "" {
@@ -71,11 +68,6 @@ func main() {
 	if err := containers.Init(); err != nil {
 		log.Fatal("failed to init containers:", err)
 	}
-
-	handler.CreemClient = creem.NewClient(
-		config.Config("CREEM_BASE_URL"),
-		config.Config("CREEM_API_KEY"),
-	)
 
 	openaiClient := openai.NewClient(
 		config.Config("OPENAI_API_KEY"),

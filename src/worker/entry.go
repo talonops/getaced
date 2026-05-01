@@ -429,8 +429,7 @@ func renewExpiringWatches() {
 	var users []structs.User
 	database.DB.Where(
 		"drive_channel_id != '' AND drive_channel_expiry IS NOT NULL AND drive_channel_expiry < ? AND "+
-			"drive_refresh_token != '' AND watch_folder_id != '' AND "+
-			"subscription_status IN ('active','trialing')",
+			"drive_refresh_token != '' AND watch_folder_id != ''",
 		cutoff,
 	).Find(&users)
 

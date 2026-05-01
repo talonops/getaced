@@ -1,7 +1,7 @@
 {
 	"info": {
 		"name": "api.getaced.io",
-		"description": "Base URL: https://api.getaced.io/v1\n\nAll protected routes need: Authorization: Bearer <token>\n\nFlow: Sign in → Exchange Code → Checkout (starts trial) → Link Drive → Set Watch Folder → Browser Session → Drop files\n\nTrials handled by Creem. 30 uses/month. Supported files: PNG, HTML.",
+		"description": "Base URL: https://api.getaced.io/v1\n\nAll protected routes need: Authorization: Bearer <token>\n\nFlow: Sign in → Exchange Code → Link Drive → Set Watch Folder → Browser Session → Drop files\n\nAccess is restricted to emails listed in the ALLOWED_EMAILS env var. Supported files: PNG, HTML, MHTML.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -21,7 +21,7 @@
 	"item": [
 		{
 			"name": "Auth",
-			"description": "Two-step auth flow:\n1. Open Google Sign In URL in browser\n2. After redirect, grab the `code` from the URL and exchange it for a JWT via POST /auth/exchange",
+			"description": "Two-step auth flow:\n1. Open Google Sign In URL in browser\n2. After redirect, grab the `code` from the URL and exchange it for a JWT via POST /auth/exchange\n\nSign-in returns 403 if the Google account email is not in ALLOWED_EMAILS.",
 			"item": [
 				{
 					"name": "Google Sign In (open in browser)",
@@ -29,7 +29,7 @@
 						"auth": { "type": "noauth" },
 						"method": "GET",
 						"url": { "raw": "{{base_url}}/auth/google", "host": ["{{base_url}}"], "path": ["auth", "google"] },
-						"description": "Redirects to Google consent screen. After login redirects to:\n{FRONTEND_URL}/auth/callback?code=<auth_code>\n\nOpen in browser. Copy the `code` from the redirect URL.\n\nThe code is single-use and expires in 30 seconds."
+						"description": "Redirects to Google consent screen. After login redirects to:\n{FRONTEND_URL}/auth/callback?code=<auth_code>\n\nOpen in browser. Copy the `code` from the redirect URL.\n\nThe code is single-use and expires in 30 seconds.\n\nReturns 403 if the signed-in email is not in ALLOWED_EMAILS."
 					}
 				},
 				{
@@ -49,35 +49,8 @@
 			]
 		},
 		{
-			"name": "Payment",
-			"description": "Payment is required BEFORE onboarding. Creem handles the 1-week free trial — user enters payment info but isn't charged for 7 days.",
-			"item": [
-				{
-					"name": "Checkout",
-					"request": {
-						"method": "POST",
-						"header": [{ "key": "Content-Type", "value": "application/json" }],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"product_id\": \"PRODUCT_ID_HERE\",\n  \"success_url\": \"https://getaced.io/dashboard?payment=success\"\n}"
-						},
-						"url": { "raw": "{{base_url}}/checkout", "host": ["{{base_url}}"], "path": ["checkout"] },
-						"description": "Creates a Creem checkout session. product_id determines the plan (monthly or quarterly).\n\nsuccess_url must start with the configured FRONTEND_URL domain.\n\nResponse: {\"checkout_url\": \"https://checkout.creem.io/...\"}\n\nRedirect user to checkout_url. After payment, Creem webhook updates subscription_status."
-					}
-				},
-				{
-					"name": "Billing Portal",
-					"request": {
-						"method": "POST",
-						"url": { "raw": "{{base_url}}/billing", "host": ["{{base_url}}"], "path": ["billing"] },
-						"description": "Returns Creem customer portal URL for managing subscription.\n\nUser must have an existing subscription.\n\nResponse: {\"portal_url\": \"https://customer-portal.creem.io/...\"}"
-					}
-				}
-			]
-		},
-		{
-			"name": "Onboarding (requires payment/trial)",
-			"description": "All onboarding endpoints require active subscription or trial (402 if not).\n\nSteps: 1. Link Drive → 2. Set Watch Folder → 3. Browser Session → 4. Complete Session",
+			"name": "Onboarding",
+			"description": "Steps: 1. Link Drive → 2. Set Watch Folder → 3. Browser Session → 4. Complete Session",
 			"item": [
 				{
 					"name": "1. Get Drive Auth URL",
@@ -113,7 +86,7 @@
 					"request": {
 						"method": "POST",
 						"url": { "raw": "{{base_url}}/onboarding/session/complete", "host": ["{{base_url}}"], "path": ["onboarding", "session", "complete"] },
-						"description": "Completes onboarding. Call after the user finishes the browser session.\n\nResponse: {\"onboarding_step\": \"complete\"}"
+						"description": "Completes onboarding. Call after the user finishes the browser session.\n\nResponse: {\"onboarding_step\": \"OnboardingComplete\"}"
 					}
 				}
 			]
@@ -126,7 +99,7 @@
 					"request": {
 						"method": "GET",
 						"url": { "raw": "{{base_url}}/me", "host": ["{{base_url}}"], "path": ["me"] },
-						"description": "Full user profile.\n\nResponse:\n{\n  \"id\": 1,\n  \"email\": \"student@gmail.com\",\n  \"name\": \"John Doe\",\n  \"avatar_url\": \"https://lh3.googleusercontent.com/...\",\n  \"onboarding_step\": \"complete\" | \"OnboardingStepDrive\" | \"OnboardingStepWatchFolder\" | \"OnboardingStepSession\",\n  \"subscription_status\": \"trialing\" | \"active\" | \"canceled\" | \"past_due\" | \"expired\" | \"\",\n  \"subscription_id\": \"sub_xxx\",\n  \"has_drive_connected\": true,\n  \"watch_folder_id\": \"1aBcDeFg...\",\n  \"bookmark_folder_name\": \"school work\",\n  \"usage_count\": 5,\n  \"usage_limit\": 30,\n  \"is_trialing\": false,\n  \"is_subscription_active\": true,\n  \"is_active\": true\n}\n\nUse onboarding_step to route user to correct page.\nUse is_active to gate features.\n\nFull flow check:\n1. If subscription_status is empty → show checkout\n2. If onboarding_step is OnboardingStepDrive → show Drive linking\n3. If onboarding_step is OnboardingStepWatchFolder → show watch folder picker\n4. If onboarding_step is OnboardingStepSession → show browser session\n5. If onboarding_step is complete → show dashboard"
+						"description": "Full user profile.\n\nResponse:\n{\n  \"id\": 1,\n  \"email\": \"student@gmail.com\",\n  \"name\": \"John Doe\",\n  \"avatar_url\": \"https://lh3.googleusercontent.com/...\",\n  \"onboarding_step\": \"OnboardingComplete\" | \"OnboardingStepDrive\" | \"OnboardingStepWatchFolder\" | \"OnboardingStepSession\",\n  \"has_drive_connected\": true,\n  \"watch_folder_id\": \"1aBcDeFg...\",\n  \"bookmark_folder_name\": \"school work\",\n  \"usage_count\": 5,\n  \"usage_limit\": 10000\n}\n\nUse onboarding_step to route user to correct page:\n1. OnboardingStepDrive → show Drive linking\n2. OnboardingStepWatchFolder → show watch folder picker\n3. OnboardingStepSession → show browser session\n4. OnboardingComplete → show dashboard"
 					}
 				},
 				{
@@ -140,8 +113,7 @@
 			]
 		},
 		{
-			"name": "Settings (requires payment/trial)",
-			"description": "All require active subscription or trial (402 if not).",
+			"name": "Settings",
 			"item": [
 				{
 					"name": "Get Settings",
@@ -193,15 +165,14 @@
 			]
 		},
 		{
-			"name": "Usage & Activity (requires payment/trial)",
-			"description": "Require active subscription or trial (402 if not).",
+			"name": "Usage & Activity",
 			"item": [
 				{
 					"name": "Get Usage",
 					"request": {
 						"method": "GET",
 						"url": { "raw": "{{base_url}}/usage", "host": ["{{base_url}}"], "path": ["usage"] },
-						"description": "Usage stats with daily breakdown for last 30 days.\n\nResponse:\n{\n  \"usage_count\": 5,\n  \"usage_limit\": 30,\n  \"usage_reset_at\": \"2026-04-15T00:00:00Z\",\n  \"subscription_status\": \"active\",\n  \"is_trialing\": false,\n  \"is_subscription_active\": true,\n  \"is_active\": true,\n  \"daily_usage\": [\n    {\"date\": \"2026-02-16\", \"count\": 0},\n    {\"date\": \"2026-02-17\", \"count\": 3},\n    ...\n  ]\n}"
+						"description": "Usage stats with daily breakdown for last 30 days.\n\nResponse:\n{\n  \"usage_count\": 5,\n  \"usage_limit\": 10000,\n  \"usage_reset_at\": \"2026-04-15T00:00:00Z\",\n  \"daily_usage\": [\n    {\"date\": \"2026-02-16\", \"count\": 0},\n    {\"date\": \"2026-02-17\", \"count\": 3}\n  ]\n}"
 					}
 				},
 				{
@@ -209,7 +180,7 @@
 					"request": {
 						"method": "GET",
 						"url": { "raw": "{{base_url}}/activity", "host": ["{{base_url}}"], "path": ["activity"] },
-						"description": "Last 20 processed files with answers.\n\nResponse:\n{\n  \"activity\": [\n    {\n      \"file_name\": \"Screenshot.png\",\n      \"answer_count\": 5,\n      \"answers\": [{\"number\": 1, \"answer\": \"A\"}, ...],\n      \"processed_at\": \"2026-03-15T22:49:20Z\"\n    }\n  ]\n}"
+						"description": "Last 20 processed files with answers.\n\nResponse:\n{\n  \"activity\": [\n    {\n      \"file_name\": \"Screenshot.png\",\n      \"answer_count\": 5,\n      \"answers\": [{\"number\": 1, \"answer\": \"A\"}],\n      \"processed_at\": \"2026-03-15T22:49:20Z\"\n    }\n  ]\n}"
 					}
 				}
 			]
@@ -218,23 +189,6 @@
 			"name": "Webhooks (server-to-server)",
 			"description": "Called by external services, not by the frontend.",
 			"item": [
-				{
-					"name": "Creem Payment Webhook",
-					"request": {
-						"auth": { "type": "noauth" },
-						"method": "POST",
-						"header": [
-							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "creem-signature", "value": "HMAC_SHA256_SIGNATURE" }
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"id\": \"evt_xxx\",\n  \"eventType\": \"checkout.completed\",\n  \"object\": { ... }\n}"
-						},
-						"url": { "raw": "{{base_url}}/webhooks/creem", "host": ["{{base_url}}"], "path": ["webhooks", "creem"] },
-						"description": "Called by Creem on payment events. Verified via HMAC-SHA256 signature.\n\nEvents handled:\n- checkout.completed — activates subscription\n- subscription.active / subscription.paid — marks active\n- subscription.trialing — marks trialing\n- subscription.canceled — marks canceled, stops Drive watch, deletes container\n- subscription.past_due — marks past_due\n- subscription.expired — marks expired, stops Drive watch, deletes container\n\nIdempotent: uses Creem event ID to prevent double-processing."
-					}
-				},
 				{
 					"name": "Drive Push Notification",
 					"request": {

@@ -18,9 +18,6 @@ func GetUsage(c fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "user not found"})
 	}
 
-	isTrialing := user.SubscriptionStatus == "trialing"
-	isSubActive := user.SubscriptionStatus == "active"
-
 	// Daily usage for last 30 days
 	since := time.Now().AddDate(0, 0, -30)
 	var dailyCounts []struct {
@@ -47,13 +44,9 @@ func GetUsage(c fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{
-		"usage_count":            user.UsageCount,
-		"usage_limit":            config.UsageLimit,
-		"usage_reset_at":         user.UsageResetAt,
-		"subscription_status":    user.SubscriptionStatus,
-		"is_trialing":            isTrialing,
-		"is_subscription_active": isSubActive,
-		"is_active":              isTrialing || isSubActive,
-		"daily_usage":            days,
+		"usage_count":    user.UsageCount,
+		"usage_limit":    config.UsageLimit,
+		"usage_reset_at": user.UsageResetAt,
+		"daily_usage":    days,
 	})
 }
