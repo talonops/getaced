@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"getaced.io/src/analytics"
 	"getaced.io/src/auth"
 	"getaced.io/src/config"
 	"getaced.io/src/database"
@@ -118,7 +117,6 @@ func GoogleCallback(c fiber.Ctx) error {
 		if err := database.DB.Create(&user).Error; err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "failed to create user"})
 		}
-		analytics.Track("user_signed_up", user.ID)
 	} else {
 		database.DB.Model(&user).Updates(map[string]interface{}{
 			"email":      userInfo.Email,

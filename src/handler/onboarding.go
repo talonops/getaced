@@ -3,7 +3,6 @@ package handler
 import (
 	"log"
 
-	"getaced.io/src/analytics"
 	"getaced.io/src/config"
 	"getaced.io/src/containers"
 	"getaced.io/src/crypto"
@@ -60,8 +59,6 @@ func CompleteSession(c fiber.Ctx) error {
 	}
 
 	database.DB.Model(&user).Update("onboarding_step", structs.OnboardingComplete)
-	analytics.Track("onboarding_step_completed", userID, analytics.WithStep("session"))
-	analytics.Track("onboarding_step_completed", userID, analytics.WithStep("complete"))
 
 	return c.JSON(fiber.Map{"onboarding_step": structs.OnboardingComplete})
 }
@@ -113,7 +110,6 @@ func SetOnboardingWatchFolder(c fiber.Ctx) error {
 		"watch_folder_id": folderID,
 		"onboarding_step": structs.OnboardingStepSession,
 	})
-	analytics.Track("onboarding_step_completed", userID, analytics.WithStep("watch_folder"))
 
 	if err := worker.RegisterUserWatch(user, srv); err != nil {
 		log.Printf("failed to register drive watch for user %d: %v", userID, err)

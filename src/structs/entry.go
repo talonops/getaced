@@ -25,7 +25,6 @@ type User struct {
 	Email              string         `gorm:"uniqueIndex" json:"email"`
 	Name               string         `json:"name,omitempty"`
 	AvatarURL          string         `json:"avatar_url,omitempty"`
-	LastActiveAt   *time.Time     `json:"last_active_at,omitempty"`
 	OnboardingStep OnboardingStep `json:"onboarding_step" gorm:"default:OnboardingStepDrive"`
 
 	// Drive integration
@@ -91,31 +90,6 @@ type FailedFile struct {
 	FileID   string `gorm:"index"`
 	FileName string
 	Failures int `gorm:"default:0"`
-}
-
-// AnalyticsEvent is an append-only log of business events.
-type AnalyticsEvent struct {
-	ID           uint      `gorm:"primaryKey;autoIncrement"`
-	CreatedAt    time.Time `gorm:"index;autoCreateTime"`
-	UserID       uint      `gorm:"index"`
-	Event        string    `gorm:"index;not null"`
-	StepName     string    `gorm:"default:null"`
-	PlanType     string    `gorm:"default:null"`
-	Amount       int       `gorm:"default:0"`
-	TokensInput  int       `gorm:"default:0"`
-	TokensOutput int       `gorm:"default:0"`
-}
-
-// AnalyticsDailySnapshot stores one row per calendar day with aggregate metrics.
-type AnalyticsDailySnapshot struct {
-	ID             uint   `gorm:"primaryKey;autoIncrement"`
-	Date           string `gorm:"uniqueIndex;not null"`
-	TotalUsers     int
-	DAU            int
-	WAU            int
-	FilesProcessed int
-	TokensInput    int
-	TokensOutput   int
 }
 
 // IPPool is used to keep track of used ip suffixes (101-254)

@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"getaced.io/src/analytics"
 	"getaced.io/src/config"
 	"getaced.io/src/crypto"
 	"getaced.io/src/database"
@@ -135,7 +134,6 @@ func DriveCallback(c fiber.Ctx) error {
 		"drive_email":         driveEmail,
 		"onboarding_step":     structs.OnboardingStepWatchFolder,
 	})
-	analytics.Track("onboarding_step_completed", userID, analytics.WithStep("drive"))
 
 	frontendURL := config.Config("FRONTEND_URL")
 	if frontendURL == "" {
